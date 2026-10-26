@@ -77,7 +77,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1
 |---|---|---|
 | `npm start` | 기본 서버 실행 | 기본 실행은 실제 기존 회사 시스템에 연결된 상태가 아닙니다. |
 | `npm run demo` | 예제 자료로 화면 실행 | 예제 데이터이며 실제 시스템 연결이나 단계 통과를 뜻하지 않습니다. |
-| `npm run check` | `student/extension.mjs`의 JavaScript 문법 검사 | 화면 동작·서버 통합·과제 채점은 검사하지 않습니다. |
+| `npm run check` | 학생 화면과 포장 도구의 JavaScript 문법 검사 | 실제 서버 연결·화면 통합·과제 채점은 검사하지 않습니다. |
+| `npm run package-app` | 새 패키지 폴더, ZIP, APP_PACKAGE_MANIFEST.json, 바탕화면 바로가기 생성 | 작업 트리가 깨끗해야 하며 Windows PowerShell을 사용합니다. 인증·설정 파일은 포함하지 않습니다. |
 
 시작 도구에서 기본 포트를 쓸 수 없다는 메시지가 나오면 다른 프로그램을 종료하지 말고, 앱 폴더에서 다음처럼 포트를 바꿔 실행합니다.
 
@@ -92,6 +93,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1 -Po
 - 포그라운드로 실행한 PowerShell 창에서 `Ctrl+C`를 눌러 서버를 종료합니다.
 - 다시 실행할 때는 앱 폴더 `on-client`에서 3.2의 시작 명령을 다시 입력합니다.
 - 실행 도구는 프로그램을 설치하거나 파일을 지우지 않습니다. 재실행 전 기존 학생 파일이나 Git 기록을 지울 필요가 없습니다.
+
+### 3.5 실제 SDP 연결
+
+기본 실행은 연결 없는 상태입니다. 실제 계정·기기·접속 판정·보안 기록을 조회하려면 담당 운영자가 발급한 SDP 호스트 설정 파일의 경로를 실행 옵션으로 지정해야 합니다. 설정 파일의 내용이나 개인 인증 자료를 프로젝트, Git, 채팅, 제출물에 복사하지 않습니다.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1 -Port 5191 -SdpHostConfig "C:\운영자가_발급한_실제_경로\sdp-host.json"
+```
+
+위 경로는 설명용 자리표시자이며 그대로 실행하면 안 됩니다. 담당자에게 실제로 발급받은 절대 경로로 바꿉니다. 계정 연결·AI 승인을 위한 native 설정은 별도이며 SDP 설정을 대신하지 않습니다. 설정을 발급받지 못했다면 연결된 것처럼 표시하거나 예제 데이터를 실제 기록으로 섞지 말고 담당 운영자에게 발급 여부를 확인합니다.
+
+기록·기기·세션은 연결 모드만으로 성공으로 판정하지 않습니다. 해당 API의 이번 응답이 정상이고 데이터 계약 검증을 통과한 경우에만 조회된 결과로 취급합니다. unknown, 오류, 미조회는 정상·안전 또는 빈 결과가 아닙니다.
 
 ## 4. 시스템 구성도
 

@@ -4,6 +4,7 @@ export function createStudentView() {
   return {
     renderIdentity({ me, devices, sessions } = {}) {
       const root = document.createElement('section');
+      root.className = 'student-identity';
 
       const addText = (parent, tag, text) => {
         const node = document.createElement(tag);
@@ -29,12 +30,20 @@ export function createStudentView() {
 
       const appendMode = (parent, resource) => {
         const modeLabels = {
-          demo: '예제 자료',
-          disconnected: '연결 없음',
-          unknown: '확인 불가',
+          demo: '예제 자료(demo)',
+          disconnected: '연결 없음(disconnected)',
+          connected: '연결 설정 있음(connected)',
+          unknown: '확인 불가(unknown)',
         };
         const modeLabel = resource && modeLabels[resource.mode];
         if (modeLabel) addText(parent, 'p', `연결 모드: ${modeLabel}`);
+        if (resource?.mode === 'connected') {
+          addText(parent, 'p', resource.status === 'ok'
+            ? '이번 조회는 연결된 서버의 응답을 받았습니다. unknown 상태는 확인 불가로 유지합니다.'
+            : '연결 설정은 있지만 이번 조회는 성공하지 않았습니다. 실제 값으로 간주하지 않습니다.');
+        } else if (resource?.mode === 'demo') {
+          addText(parent, 'p', '예제 자료입니다. 실제 PC나 계정에서 읽은 값이 아닙니다.');
+        }
       };
 
       const renderResource = (title, resource, renderData) => {
@@ -115,7 +124,7 @@ export function createStudentView() {
         challenge: '추가 인증 또는 확인이 필요합니다. 이 앱이 확인 절차를 대신 수행하지 않습니다.',
         unknown: '판정을 확인할 수 없습니다. 허용된 것이 아닙니다.',
       };
-      const modeLabels = { demo: '예제 자료', disconnected: '연결 없음', unknown: '확인 불가' };
+      const modeLabels = { demo: '예제 자료(demo)', disconnected: '연결 없음(disconnected)', connected: '연결 설정 있음(connected)', unknown: '확인 불가(unknown)' };
 
       addText(root, 'h3', '접속 판정');
 
@@ -154,6 +163,7 @@ export function createStudentView() {
     },
     renderEvents({ status, data, error, meta, mode } = {}) {
       const root = document.createElement('section');
+      root.className = 'student-events';
 
       const addText = (parent, tag, text) => {
         const node = document.createElement(tag);
@@ -168,7 +178,7 @@ export function createStudentView() {
       const accessLabels = { allowed: '접속 허용', denied: '접속 거부', unknown: '확인 불가' };
       const sessionLabels = { active: '활성', expired: '만료', revoked: '철회됨', unknown: '확인 불가' };
       const deviceLabels = { compliant: '보안 기준 충족', noncompliant: '보안 기준 미충족', unknown: '확인 불가' };
-      const modeLabels = { demo: '예제 자료', disconnected: '연결 없음', unknown: '확인 불가' };
+      const modeLabels = { demo: '예제 자료(demo)', disconnected: '연결 없음(disconnected)', connected: '연결 설정 있음(connected)', unknown: '확인 불가(unknown)' };
 
       // 한국어 뜻과 원래 값을 함께 적는다. 목록에 없는 값은 확인 불가로 처리한다.
       const withCode = (labels, value) => (isText(value) && Object.hasOwn(labels, value)
@@ -203,7 +213,19 @@ export function createStudentView() {
 
       const unique = (list) => [...new Set(list.filter(isText))];
 
-      addText(root, 'h3', '접속 기록·XDR 경보');
+      addText(root, 'h3', '보안 기록 타임라인');
+      const sourceMode = meta?.mode ?? mode;
+      if (sourceMode === 'demo') {
+        addText(root, 'p', '예제 데이터(demo): 아래 값은 화면 설명용이며 실제 PC나 보안 시스템에서 조회한 기록이 아닙니다.');
+      } else if (sourceMode === 'connected' && status === 'ok' && Array.isArray(data)) {
+        addText(root, 'p', '실제 연결 조회: 이번 요청의 응답을 확인했습니다. 본인 범위의 최근 기록만 표시하며 전체 직원 이력이나 실시간 전체 위협 탐지는 아닙니다.');
+      } else if (sourceMode === 'connected') {
+        addText(root, 'p', '연결 설정 있음(connected): 이번 기록 조회는 성공하지 않았으므로 실제 기록이 확인된 상태가 아닙니다.');
+      } else if (sourceMode === 'disconnected') {
+        addText(root, 'p', '연결 없음(disconnected): 실제 보안 기록을 불러오지 못했습니다. 예제 데이터로 대체하지 않습니다.');
+      } else {
+        addText(root, 'p', '조회 출처 확인 불가: 연결 상태를 확인하기 전에는 기록의 실제 여부를 판단하지 않습니다.');
+      }
 
       if (status === 'loading') {
         addText(root, 'p', '기록을 불러오는 중');
@@ -230,8 +252,10 @@ export function createStudentView() {
           addText(root, 'p', '이 목록은 본인의 최근 기록(최대 40건)입니다. 모든 직원의 전체 이력이나 실시간 전체 위협 탐지가 아닙니다. XDR 경보는 서버가 이미 저장한 경보만 표시합니다.');
 
           const filterBar = document.createElement('div');
+          filterBar.className = 'row';
           const listArea = document.createElement('div');
           const detailArea = document.createElement('div');
+          detailArea.className = 'card';
           const buttons = new Map();
 
           const visibleEvents = () => sorted.filter((event) => (filters.kind === 'all' || event.kind === filters.kind)
@@ -243,9 +267,11 @@ export function createStudentView() {
             const event = selectedId === null ? null : sorted.find((item) => item.id === selectedId);
             if (!event) return;
             const box = document.createElement('section');
+            box.className = 'event-block';
             box.setAttribute('data-student-event-detail', String(event.id));
             addText(box, 'h4', '기록 상세');
             addText(box, 'p', `사건 ID: ${displayValue(event.id)}`);
+            addText(box, 'p', `원본 시각(at): ${displayValue(event.at)}`);
             addText(box, 'p', `앱 ID: ${appText(event.appId)}`);
             const addList = (title, rows, empty) => {
               addText(box, 'h5', title);
@@ -287,17 +313,29 @@ export function createStudentView() {
             if (rows.length === 0) {
               addText(listArea, 'p', '선택한 조건에 맞는 기록이 없습니다.');
             } else {
-              const list = document.createElement('ul');
+              const list = document.createElement('ol');
+              list.className = 'records';
               for (const event of rows) {
                 const item = document.createElement('li');
+                item.className = 'event';
                 item.setAttribute('data-student-event-id', String(event.id));
+                const head = document.createElement('div');
+                head.className = 'event-head';
+                addText(head, 'h3', displayValue(event.summary));
+                const kindTag = addText(head, 'span', withCode(kindLabels, event.kind));
+                kindTag.className = 'tag';
+                if (sourceMode === 'demo') {
+                  const demoTag = addText(head, 'span', '예제');
+                  demoTag.className = 'tag tag-demo';
+                }
+                item.append(head);
+                const timeLine = addText(item, 'p', `시각: ${formatAt(event.at)}`);
+                timeLine.className = 'muted';
                 addText(item, 'p', `사건 ID: ${displayValue(event.id)}`);
-                addText(item, 'p', `시각: ${formatAt(event.at)}`);
-                addText(item, 'p', `종류: ${withCode(kindLabels, event.kind)}`);
                 addText(item, 'p', `앱: ${appText(event.appId)}`);
-                addText(item, 'p', `요약: ${displayValue(event.summary)}`);
                 const button = addText(item, 'button', `${event.id} 상세`);
                 button.type = 'button';
+                button.className = 'btn';
                 button.setAttribute('aria-expanded', String(event.id === selectedId));
                 button.addEventListener('click', () => {
                   selectedId = event.id;
@@ -356,6 +394,7 @@ export function createStudentView() {
     },
     renderStatus({ devices, sessions, notifications, diagnostics, mode } = {}) {
       const root = document.createElement('section');
+      root.className = 'student-status';
 
       const addText = (parent, tag, text) => {
         const node = document.createElement(tag);
@@ -368,7 +407,7 @@ export function createStudentView() {
       const displayValue = (value) => (isText(value) ? value : '확인 불가');
       const deviceLabels = { compliant: '보안 기준 충족', noncompliant: '보안 기준 미충족', unknown: '확인 불가' };
       const sessionLabels = { active: '활성', expired: '만료', revoked: '철회됨', unknown: '확인 불가' };
-      const modeLabels = { demo: '예제 자료', disconnected: '연결 없음', unknown: '확인 불가' };
+      const modeLabels = { demo: '예제 자료(demo)', disconnected: '연결 없음(disconnected)', connected: '연결 설정 있음(connected)', unknown: '확인 불가(unknown)' };
       const resourceLabels = { devices: '기기', sessions: '세션', events: '보안 기록', access: '접속 판정', diagnostics: '도움정보', vulnerabilities: '설치 패키지 조회' };
       const unverifiedCodes = ['CONTRACT_MISMATCH', 'ENGINE_RESULT_UNVERIFIED'];
 
@@ -395,6 +434,18 @@ export function createStudentView() {
         return `${what} 불러오지 못했습니다${timedOut ? '(시간 초과)' : ''}: ${message}`;
       };
       const retryHint = '다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요. 자동으로 다시 요청하지 않습니다.';
+
+      addText(root, 'h3', '내 PC 상태와 위험 알림');
+      if (mode === 'demo') {
+        addText(root, 'p', '예제 자료(demo): 아래 상태와 알림은 화면 설명용 값이며 실제 PC에서 측정·조회한 결과가 아닙니다.');
+      } else if (mode === 'connected') {
+        addText(root, 'p', '연결 설정 있음(connected): 각 항목의 조회 상태를 따로 확인하세요. 응답의 unknown은 실제 상태를 확인하지 못했다는 뜻입니다.');
+      } else if (mode === 'disconnected') {
+        addText(root, 'p', '연결 없음(disconnected): 실제 계정·기기·세션·기록을 조회하지 못해 실제 위험 여부를 판단할 수 없습니다.');
+      } else {
+        addText(root, 'p', '연결 출처 확인 불가: 정상이나 안전으로 추정하지 않습니다.');
+      }
+      addText(root, 'p', '위험 알림은 조회된 기록과 기기·세션 상태, 조회 실패를 모아 보여 줍니다. 이 화면 자체가 새 위협을 탐지하지는 않습니다.');
 
       const addSection = (title) => {
         const block = document.createElement('section');
@@ -576,6 +627,7 @@ export function createStudentView() {
       const modeLabels = {
         demo: '예제 자료(demo)',
         disconnected: '연결 없음(disconnected)',
+        connected: '연결 설정 있음(connected)',
         unknown: '확인 불가(unknown)',
       };
       if (modeLabels[mode]) {
@@ -737,7 +789,7 @@ export function createStudentView() {
       };
 
       const isText = (value) => typeof value === 'string' && value.length > 0;
-      const modeLabels = { demo: '예제 자료', disconnected: '연결 없음', unknown: '확인 불가' };
+      const modeLabels = { demo: '예제 자료(demo)', disconnected: '연결 없음(disconnected)', connected: '연결 설정 있음(connected)', unknown: '확인 불가(unknown)' };
 
       // 열쇠·토큰처럼 보이는 값과 원문 오류는 표시하지 않는다.
       const SECRET_LIKE = /bearer|token|secret|password|passwd|api[_-]?key|authorization/i;
