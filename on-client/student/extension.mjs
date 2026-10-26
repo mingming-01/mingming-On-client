@@ -223,6 +223,7 @@ export function createStudentView() {
         addText(root, 'p', '연결 설정 있음(connected): 이번 기록 조회는 성공하지 않았으므로 실제 기록이 확인된 상태가 아닙니다.');
       } else if (sourceMode === 'disconnected') {
         addText(root, 'p', '연결 없음(disconnected): 실제 보안 기록을 불러오지 못했습니다. 예제 데이터로 대체하지 않습니다.');
+        addText(root, 'p', '실제 연결은 담당 운영자가 발급한 설정 파일 경로를 -SdpHostConfig 옵션으로 지정해야 합니다.');
       } else {
         addText(root, 'p', '조회 출처 확인 불가: 연결 상태를 확인하기 전에는 기록의 실제 여부를 판단하지 않습니다.');
       }
@@ -442,6 +443,7 @@ export function createStudentView() {
         addText(root, 'p', '연결 설정 있음(connected): 각 항목의 조회 상태를 따로 확인하세요. 응답의 unknown은 실제 상태를 확인하지 못했다는 뜻입니다.');
       } else if (mode === 'disconnected') {
         addText(root, 'p', '연결 없음(disconnected): 실제 계정·기기·세션·기록을 조회하지 못해 실제 위험 여부를 판단할 수 없습니다.');
+        addText(root, 'p', '실제 연결은 담당 운영자가 발급한 설정 경로를 -SdpHostConfig 옵션으로 지정한 뒤 다시 실행해야 합니다.');
       } else {
         addText(root, 'p', '연결 출처 확인 불가: 정상이나 안전으로 추정하지 않습니다.');
       }

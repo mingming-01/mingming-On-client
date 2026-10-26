@@ -60,6 +60,7 @@ function isSafePackageFile(file) {
     || relative === 'package.json'
     || ['public/', 'src/', 'student/', 'vendor/'].some((dir) => relative.startsWith(dir))
     || relative === 'tools/start-alekov.ps1'
+    || relative === 'tools/launch-mingming.ps1'
     || approvedDocs.has(relative);
   if (!allowed) return false;
   if (baseName === '.env' || (baseName.startsWith('.env.') && baseName !== '.env.example')) return false;
@@ -79,6 +80,7 @@ const requiredFiles = [
   'student/extension.mjs',
   'student/engine-adapter.mjs',
   'tools/start-alekov.ps1',
+  'tools/launch-mingming.ps1',
 ];
 for (const relative of requiredFiles) {
   if (!files.includes(prefix + relative)) {
@@ -130,7 +132,7 @@ const installGuide = [
   '',
   '이 폴더의 주소 표시줄에 powershell을 입력해 PowerShell을 열고 다음을 실행합니다.',
   '',
-  'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\start-alekov.ps1',
+  'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\launch-mingming.ps1',
   '',
   '브라우저에서 http://127.0.0.1:5189/ 을 엽니다. 종료하려면 PowerShell 창에서 Ctrl+C를 누릅니다.',
   '',
@@ -138,7 +140,7 @@ const installGuide = [
   '',
   '기본 실행은 연결 없음 상태일 수 있습니다. 실제 연결이 필요하면 담당 운영자가 발급한 설정 파일 경로가 있어야 합니다.',
   '',
-  'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\start-alekov.ps1 -SdpHostConfig "C:\\실제로_발급받은_경로\\sdp-host.json"',
+  'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\launch-mingming.ps1 -SdpHostConfig "C:\\실제로_발급받은_경로\\sdp-host.json"',
   '',
   '위 경로는 설명용 자리표시자입니다. 실제로 발급받은 경로로 바꾸세요. 설정 파일 내용, 인증서, 개인키, JWT는 프로젝트 폴더나 압축 파일에 복사하지 않습니다. 설정을 발급받지 못했다면 담당 운영자에게 문의하세요.',
   '',
@@ -188,7 +190,7 @@ const manifest = {
     externalNpmDependencies: 0,
   },
   start: {
-    script: 'tools/start-alekov.ps1',
+    script: 'tools/launch-mingming.ps1',
     defaultUrl: 'http://127.0.0.1:5189/',
     defaultMode: 'disconnected unless a connection is explicitly configured',
   },
@@ -236,7 +238,7 @@ const powershellPath = path.join(
   'v1.0',
   'powershell.exe',
 );
-const startScript = path.join(packageRoot, 'tools', 'start-alekov.ps1');
+const startScript = path.join(packageRoot, 'tools', 'launch-mingming.ps1');
 const shortcutArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + startScript + '" -Port 5189';
 const shortcutCommand = '$ErrorActionPreference = "Stop"; '
   + '$shell = New-Object -ComObject WScript.Shell; '
