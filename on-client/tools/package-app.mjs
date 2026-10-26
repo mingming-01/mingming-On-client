@@ -50,6 +50,7 @@ const approvedDocs = new Set([
   'docs/STUDENT_RUNBOOK.md',
   'docs/CONNECTION_TROUBLESHOOT.md',
   'docs/SDP_HOST_CONNECTION.md',
+  'docs/LOCAL_SYSTEM_STATUS.md',
 ]);
 
 function isSafePackageFile(file) {
@@ -117,7 +118,7 @@ for (const file of files) {
 const distributedPackagePath = path.join(packageRoot, 'package.json');
 const distributedPackage = JSON.parse(readFileSync(distributedPackagePath, 'utf8'));
 delete distributedPackage.scripts['package-app'];
-distributedPackage.scripts.check = 'node --check student/extension.mjs';
+distributedPackage.scripts.check = 'node --check src/server.mjs && node --check public/app.js && node --check student/extension.mjs';
 writeFileSync(distributedPackagePath, JSON.stringify(distributedPackage, null, 2) + '\n', 'utf8');
 
 const installGuide = [

@@ -393,6 +393,98 @@ export function createStudentView() {
 
       return root;
     },
+    renderLocalSystem({ status, data, error, history = [], attemptedAt } = {}) {
+      const root = document.createElement('section');
+      root.className = 'student-local-system';
+
+      const addText = (parent, tag, text, className) => {
+        const node = document.createElement(tag);
+        node.textContent = text;
+        if (className) node.className = className;
+        parent.append(node);
+        return node;
+      };
+      const timeText = (value) => {
+        if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return '시각 확인 불가';
+        return new Date(value).toLocaleString('ko-KR');
+      };
+      const numberText = (value, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : '확인 불가';
+      const metricOk = (metric) => metric && metric.status === 'ok';
+      const cpuText = (metric) => metricOk(metric) ? numberText(metric.percent, 1) + ' %' : '확인 불가';
+      const memoryText = (metric) => metricOk(metric)
+        ? numberText(metric.usedGiB) + ' / ' + numberText(metric.totalGiB) + ' GiB 사용 · 사용 가능 ' + numberText(metric.freeGiB) + ' GiB · ' + numberText(metric.percentUsed, 1) + ' % 사용'
+        : '확인 불가';
+      const diskText = (metric) => metricOk(metric)
+        ? numberText(metric.freeGiB) + ' / ' + numberText(metric.totalGiB) + ' GiB 남음 / 전체 · ' + numberText(metric.percentUsed, 1) + ' % 사용 중'
+        : '확인 불가';
+      const metricValue = (metric, kind) => kind === 'cpu' ? cpuText(metric) : kind === 'memory' ? memoryText(metric) : diskText(metric);
+      const names = { cpu: 'CPU 사용률', memory: '메모리 사용량', disk: '디스크 남은 공간' };
+
+      addText(root, 'h3', '내 PC 실측 기록');
+      addText(root, 'p', '운영체제에서 직접 읽은 값입니다. 관리자 권한은 요청하지 않습니다. 예시 값은 사용하지 않으며, 읽지 못한 항목은 확인 불가로 남깁니다.');
+
+      if (status === 'idle' || status == null) {
+        addText(root, 'p', '아직 측정하지 않았습니다. 「지금 측정」을 눌러 현재 값을 확인하세요.');
+      } else if (status === 'loading') {
+        addText(root, 'p', '측정 중입니다. 이전 기록은 현재 측정값으로 대신 표시하지 않습니다.');
+      } else if (status === 'error') {
+        addText(root, 'p', '이번 요청: 확인 불가 · ' + (typeof error?.message === 'string' ? error.message : '측정 요청을 완료하지 못했습니다.'));
+        addText(root, 'p', '요청 시각: ' + timeText(attemptedAt));
+      } else if (status === 'ok' && data) {
+        addText(root, 'p', '이번 측정 완료 · 결과 시각: ' + timeText(data.measuredAt));
+        for (const key of ['cpu', 'memory', 'disk']) {
+          const metric = data[key];
+          const block = document.createElement('section');
+          block.className = 'local-system-metric';
+          addText(block, 'h4', names[key]);
+          if (metricOk(metric)) {
+            addText(block, 'p', metricValue(metric, key));
+            addText(block, 'p', '측정 시각: ' + timeText(metric.checkedAt) + ' · 단위: ' + metric.unit);
+            addText(block, 'p', '출처: ' + metric.source);
+          } else {
+            addText(block, 'p', '확인 불가');
+            addText(block, 'p', '이유: ' + (typeof metric?.reason === 'string' ? metric.reason : '측정 이유를 확인할 수 없습니다.'));
+            addText(block, 'p', '측정 시각: ' + timeText(metric?.checkedAt) + ' · 단위: ' + (typeof metric?.unit === 'string' ? metric.unit : '확인 불가'));
+            addText(block, 'p', '출처: ' + (typeof metric?.source === 'string' ? metric.source : '확인 불가'));
+          }
+
+          const prior = [...history]
+            .filter((row) => row && row.measuredAt && Date.parse(row.measuredAt) < Date.parse(data.measuredAt) && metricOk(row[key]))
+            .sort((a, b) => Date.parse(b.measuredAt) - Date.parse(a.measuredAt))[0];
+          if (metricOk(metric) && prior) {
+            let difference;
+            if (key === 'cpu') {
+              difference = 'CPU 사용률 변화 ' + (metric.percent - prior.cpu.percent >= 0 ? '+' : '') + numberText(metric.percent - prior.cpu.percent, 1) + ' %p';
+            } else if (key === 'memory') {
+              const delta = metric.usedGiB - prior.memory.usedGiB;
+              difference = '사용량 변화 ' + (delta >= 0 ? '+' : '') + numberText(delta) + ' GiB · 사용률 변화 ' + (metric.percentUsed - prior.memory.percentUsed >= 0 ? '+' : '') + numberText(metric.percentUsed - prior.memory.percentUsed, 1) + ' %p';
+            } else {
+              const delta = metric.freeGiB - prior.disk.freeGiB;
+              difference = '남은 공간 변화 ' + (delta >= 0 ? '+' : '') + numberText(delta) + ' GiB';
+            }
+            addText(block, 'p', '이전 실측 대비: ' + difference + ' · 비교 기준 시각: ' + timeText(prior.measuredAt));
+          } else if (metricOk(metric)) {
+            addText(block, 'p', '추이 비교: 비교할 이전 실측이 없습니다. 한 번 더 측정하면 비교합니다.');
+          }
+          root.append(block);
+        }
+      } else {
+        addText(root, 'p', '확인 불가: 측정 상태의 형식을 확인할 수 없습니다.');
+      }
+
+      const rows = Array.isArray(history) ? [...history].sort((a, b) => Date.parse(b?.measuredAt || '') - Date.parse(a?.measuredAt || '')).slice(0, 10) : [];
+      if (rows.length) {
+        addText(root, 'h4', '최근 측정 타임라인 (최대 10회)');
+        const list = document.createElement('ol');
+        for (const row of rows) {
+          const summary = ['cpu', 'memory', 'disk'].map((key) => names[key] + ': ' + metricValue(row?.[key], key));
+          addText(list, 'li', timeText(row?.measuredAt) + ' · ' + summary.join(' · '));
+        }
+        root.append(list);
+        addText(root, 'p', '추이 기록은 현재 화면을 열어 둔 동안 메모리에만 보관됩니다. 페이지를 새로 열면 초기화되며, 디스크에 저장하거나 외부로 전송하지 않습니다.');
+      }
+      return root;
+    },
     renderStatus({ devices, sessions, notifications, diagnostics, mode } = {}) {
       const root = document.createElement('section');
       root.className = 'student-status';

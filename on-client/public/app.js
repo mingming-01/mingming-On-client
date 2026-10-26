@@ -55,6 +55,7 @@ const state = {
   sessions: { status: 'loading' },
   access: { status: 'idle' },
   diagnostics: { status: 'idle' },
+  localSystem: { status: 'idle', history: [] },
   vulnerabilities: { status: 'idle' },
   aiConnection: { status: 'idle' },
   selectedExplanation: { event: null, resource: { status: 'idle' } },
@@ -1182,6 +1183,7 @@ function studentData(kind) {
   if (kind === 'aiConnection') return { ...snapshot(state.aiConnection), checkedAt: state.aiConnection.meta?.checkedAt ?? null, explanationAccepted: false };
   if (kind === 'explanation') return structuredClone({ event: state.selectedExplanation.event, explanation: snapshot(state.selectedExplanation.resource), checkedAt: state.selectedExplanation.resource.meta?.checkedAt ?? null });
   if (kind === 'vulnerabilities') return snapshot(state.vulnerabilities);
+  if (kind === 'localSystem') return structuredClone(state.localSystem);
   if (kind === 'identity') return { me: snapshot(state.me), devices: snapshot(state.devices), sessions: snapshot(state.sessions) };
   if (kind === 'decision') {
     const access = state.access;
@@ -1203,11 +1205,81 @@ function studentData(kind) {
   return snapshot(state.events);
 }
 
+function validLocalSystemData(data) {
+  if (!isRecord(data) || !isTime(data.measuredAt)) return false;
+  const validMetric = (metric, numbers) => isRecord(metric)
+    && ['ok', 'unavailable'].includes(metric.status)
+    && isTime(metric.checkedAt)
+    && isText(metric.source)
+    && isText(metric.unit)
+    && (metric.status === 'unavailable'
+      ? isText(metric.reason)
+      : numbers.every((key) => Number.isFinite(metric[key]) && metric[key] >= 0));
+  return validMetric(data.cpu, ['percent'])
+    && data.cpu.percent <= 100
+    && validMetric(data.memory, ['usedGiB', 'totalGiB', 'freeGiB', 'percentUsed'])
+    && data.memory.totalGiB > 0
+    && data.memory.freeGiB <= data.memory.totalGiB + 0.02
+    && data.memory.percentUsed <= 100
+    && validMetric(data.disk, ['freeGiB', 'totalGiB', 'usedGiB', 'percentUsed'])
+    && data.disk.totalGiB > 0
+    && data.disk.freeGiB <= data.disk.totalGiB + 0.02
+    && data.disk.percentUsed <= 100;
+}
+
+let localSystemGeneration = 0;
+async function loadLocalSystem() {
+  const button = $('local-system-refresh');
+  if (button.disabled) return;
+  const currentGeneration = ++localSystemGeneration;
+  const history = state.localSystem.history || [];
+  const attemptedAt = new Date().toISOString();
+  state.localSystem = { status: 'loading', history, attemptedAt };
+  button.disabled = true;
+  button.textContent = '측정 중…';
+  renderStudent('localSystem');
+
+  try {
+    const result = await request('/api/local-system');
+    if (currentGeneration !== localSystemGeneration) return;
+    if (result.ok && validLocalSystemData(result.data)) {
+      const data = structuredClone(result.data);
+      state.localSystem = {
+        status: 'ok',
+        data,
+        history: [...history, data].slice(-10),
+        attemptedAt,
+      };
+    } else if (result.ok) {
+      state.localSystem = {
+        status: 'error',
+        error: { code: 'INVALID_RESPONSE', message: '측정 자료의 형식이 올바르지 않아 값을 확인할 수 없습니다.' },
+        history,
+        attemptedAt,
+      };
+    } else {
+      state.localSystem = {
+        status: 'error',
+        error: { code: result.error?.code || 'LOCAL_SYSTEM_UNAVAILABLE', message: result.error?.message || '로컬 PC 상태를 읽지 못했습니다.' },
+        history,
+        attemptedAt,
+      };
+    }
+    renderStudent('localSystem');
+  } finally {
+    if (currentGeneration === localSystemGeneration) {
+      button.disabled = false;
+      button.textContent = '지금 측정';
+    }
+  }
+}
+
 const STUDENT_SLOTS = {
   identity: { slot: 'student-identity', fn: 'renderIdentity' },
   decision: { slot: 'student-decision', fn: 'renderDecision' },
   events: { slot: 'student-events', fn: 'renderEvents' },
   status: { slot: 'student-status', fn: 'renderStatus' },
+  localSystem: { slot: 'student-local-system', fn: 'renderLocalSystem' },
   vulnerabilities: { slot: 'student-vulnerabilities', fn: 'renderVulnerabilities' },
   aiConnection: { slot: 'student-ai-connection', fn: 'renderAiConnection' },
   explanation: { slot: 'student-explanation', fn: 'renderExplanation' },
@@ -1332,6 +1404,7 @@ function init() {
   setupNav();
   $('refresh').addEventListener('click', () => loadAll());
   $('diag-load').addEventListener('click', () => loadDiagnostics());
+  $('local-system-refresh').addEventListener('click', () => loadLocalSystem());
   $('diag-copy').addEventListener('click', () => copyDiagnostics());
   $('vulnerabilities-load').addEventListener('click', () => loadVulnerabilities());
   $('vulnerabilities-cancel').addEventListener('click', () => cancelVulnerabilities());

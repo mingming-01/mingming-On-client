@@ -1,7 +1,8 @@
 import http from 'node:http';
-import {readFile} from 'node:fs/promises';
+import os from 'node:os';
+import {readFile, statfs} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {resolve} from 'node:path';
+import {parse, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {types} from 'node:util';
@@ -383,6 +384,73 @@ export function createOnServer(serverOptions={}) {
         const input=await bounded(()=>jsonBody(req,keys,(_key,value)=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)));
         const output=await bounded(signal=>connections[kind](input,{signal}));
         send(output.status,output.body);return;
+      }
+      if(req.method==='GET'&&url.pathname==='/api/local-system'){
+        const gib=1024**3;
+        const round=value=>Number(value.toFixed(2));
+        const checkedAt=()=>new Date().toISOString();
+        const unavailable=(source,unit,reason)=>({status:'unavailable',checkedAt:checkedAt(),source,unit,reason});
+        const readFailure=(kind,error)=>{
+          const code=typeof error?.code==='string'?error.code:'';
+          if(code==='EPERM'||code==='EACCES')return '일반 사용자 권한으로 운영체제가 이 정보를 읽도록 허용하지 않았습니다.';
+          if(['ENOSYS','ENOTSUP','ERR_METHOD_NOT_IMPLEMENTED'].includes(code))return '현재 운영체제 또는 Node.js에서 이 측정 방법을 지원하지 않습니다.';
+          return kind+' 정보를 운영체제에서 읽지 못했습니다'+(code?' (오류 코드 '+code+')': '')+'.';
+        };
+
+        let cpu;
+        try{
+          const before=os.cpus();
+          if(!Array.isArray(before)||before.length===0)throw new Error('CPU 정보 없음');
+          await new Promise(resolveDelay=>setTimeout(resolveDelay,400));
+          assertAlive();
+          const after=os.cpus();
+          if(!Array.isArray(after)||after.length!==before.length)throw new Error('CPU 측정 구간 불일치');
+          const totals=list=>list.reduce((sum,core)=>{
+            if(!core?.times||!Number.isFinite(core.times.idle))throw new Error('CPU 누적 시간 확인 불가');
+            const values=Object.values(core.times);
+            if(values.some(value=>!Number.isFinite(value)||value<0))throw new Error('CPU 누적 시간 확인 불가');
+            sum.total+=values.reduce((total,value)=>total+value,0);
+            sum.idle+=core.times.idle;
+            return sum;
+          },{total:0,idle:0});
+          const start=totals(before),end=totals(after);
+          const elapsed=end.total-start.total,idle=end.idle-start.idle;
+          if(!Number.isFinite(elapsed)||elapsed<=0||!Number.isFinite(idle)||idle<0)throw new Error('CPU 시간 변화 확인 불가');
+          const percent=Math.min(100,Math.max(0,((elapsed-idle)/elapsed)*100));
+          cpu={status:'ok',checkedAt:checkedAt(),source:'node:os cpus() 누적 시간 차이 (약 400 ms)',unit:'%',percent:Number(percent.toFixed(1))};
+        }catch(error){
+          if(lifetime.signal.aborted)throw error;
+          cpu=unavailable('node:os cpus()','%',readFailure('CPU',error));
+        }
+
+        let memory;
+        try{
+          const totalBytes=os.totalmem(),freeBytes=os.freemem();
+          if(!Number.isFinite(totalBytes)||!Number.isFinite(freeBytes)||totalBytes<=0||freeBytes<0||freeBytes>totalBytes)throw new Error('메모리 값 확인 불가');
+          const usedBytes=totalBytes-freeBytes;
+          memory={status:'ok',checkedAt:checkedAt(),source:'node:os totalmem()/freemem()',unit:'GiB',
+            usedGiB:round(usedBytes/gib),totalGiB:round(totalBytes/gib),freeGiB:round(freeBytes/gib),
+            percentUsed:Number((usedBytes/totalBytes*100).toFixed(1))};
+        }catch(error){
+          memory=unavailable('node:os totalmem()/freemem()','GiB',readFailure('메모리',error));
+        }
+
+        let disk;
+        try{
+          const volume=process.env.SystemDrive?process.env.SystemDrive+'/':parse(process.cwd()).root;
+          const stats=await statfs(volume);
+          const totalBytes=stats.blocks*stats.bsize,freeBytes=stats.bavail*stats.bsize;
+          if(!Number.isFinite(totalBytes)||!Number.isFinite(freeBytes)||totalBytes<=0||freeBytes<0||freeBytes>totalBytes)throw new Error('디스크 값 확인 불가');
+          const usedBytes=totalBytes-freeBytes;
+          disk={status:'ok',checkedAt:checkedAt(),source:'node:fs/promises statfs() (시스템 드라이브)',unit:'GiB',
+            freeGiB:round(freeBytes/gib),totalGiB:round(totalBytes/gib),usedGiB:round(usedBytes/gib),
+            percentUsed:Number((usedBytes/totalBytes*100).toFixed(1))};
+        }catch(error){
+          disk=unavailable('node:fs/promises statfs() (시스템 드라이브)','GiB',readFailure('디스크 남은 공간',error));
+        }
+        assertAlive();
+        send(200,{ok:true,data:{measuredAt:checkedAt(),cpu,memory,disk}});
+        return;
       }
       const gets=new Map([['/api/me',['readIdentity','identity']],['/api/apps',['readApps','apps']],['/api/events',['readEvents','events']],['/api/devices',['readDevices','devices']],['/api/sessions',['readSessions','sessions']]]);
       if(req.method==='GET'&&gets.has(url.pathname)){

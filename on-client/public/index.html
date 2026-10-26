@@ -78,6 +78,15 @@
           <div id="student-status" class="student-slot" aria-live="polite"></div>
         </section>
 
+        <section class="card student" aria-labelledby="local-system-title">
+          <h2 id="local-system-title">내 PC 상태 <span class="tag tag-student">학생 구현 · 읽기 전용</span></h2>
+          <p class="muted">지금 측정 버튼을 눌러 CPU 사용률, 메모리 사용량, 시스템 드라이브의 남은 공간을 조회합니다. 자동 수집이나 외부 전송은 하지 않습니다.</p>
+          <div class="row">
+            <button type="button" id="local-system-refresh" class="btn">지금 측정</button>
+          </div>
+          <div id="student-local-system" class="student-slot" aria-live="polite"></div>
+        </section>
+
         <section class="card provided" aria-labelledby="diag-title">
           <h2 id="diag-title">도움정보 <span class="tag">제공</span></h2>
           <p class="muted">서버의 비밀 없는 연결 점검 결과를 불러와 직접 확인한 뒤 복사할 수 있습니다. 자동으로 전송하지 않습니다.</p>
