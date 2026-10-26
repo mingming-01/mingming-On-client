@@ -1215,16 +1215,15 @@ function validLocalSystemData(data) {
     && (metric.status === 'unavailable'
       ? isText(metric.reason)
       : numbers.every((key) => Number.isFinite(metric[key]) && metric[key] >= 0));
-  return validMetric(data.cpu, ['percent'])
-    && data.cpu.percent <= 100
-    && validMetric(data.memory, ['usedGiB', 'totalGiB', 'freeGiB', 'percentUsed'])
-    && data.memory.totalGiB > 0
-    && data.memory.freeGiB <= data.memory.totalGiB + 0.02
-    && data.memory.percentUsed <= 100
-    && validMetric(data.disk, ['freeGiB', 'totalGiB', 'usedGiB', 'percentUsed'])
-    && data.disk.totalGiB > 0
-    && data.disk.freeGiB <= data.disk.totalGiB + 0.02
-    && data.disk.percentUsed <= 100;
+  if (!validMetric(data.cpu, ['percent'])
+    || !validMetric(data.memory, ['usedGiB', 'totalGiB', 'freeGiB', 'percentUsed'])
+    || !validMetric(data.disk, ['freeGiB', 'totalGiB', 'usedGiB', 'percentUsed'])) return false;
+  if (data.cpu.status === 'ok' && data.cpu.percent > 100) return false;
+  if (data.memory.status === 'ok' && (data.memory.totalGiB <= 0
+    || data.memory.freeGiB > data.memory.totalGiB + 0.02 || data.memory.percentUsed > 100)) return false;
+  if (data.disk.status === 'ok' && (data.disk.totalGiB <= 0
+    || data.disk.freeGiB > data.disk.totalGiB + 0.02 || data.disk.percentUsed > 100)) return false;
+  return true;
 }
 
 let localSystemGeneration = 0;
