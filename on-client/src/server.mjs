@@ -1,11 +1,12 @@
 import http from 'node:http';
+import {execFile} from 'node:child_process';
 import os from 'node:os';
 import {readFile, statfs} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {parse, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {types} from 'node:util';
+import {promisify, types} from 'node:util';
 import {createActionService} from './actions/service.mjs';
 import {createSdpActionConfiguration} from './actions/sdp-action-engine.mjs';
 import {readActionStartupConfiguration} from './actions/action-startup-config.mjs';
@@ -22,6 +23,11 @@ import {nativeOwn,nativePublicError} from './connection/native-login.mjs';
 import {createNativeHostContext,captureNativeHostConfiguration,readNativeHostConfiguration,openNativeHostOperation,readNativeHostOperation,assertNativeHostOperation,createNativeOperationVault,closeNativeHostOperation} from './connection/native-context.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
+const execFileAsync=promisify(execFile);
+const NETWORK_READ_SCRIPT="$ErrorActionPreference = 'Stop'\n$ProgressPreference = 'SilentlyContinue'\n$utf8 = New-Object System.Text.UTF8Encoding $false\n[Console]::OutputEncoding = $utf8\n$OutputEncoding = $utf8\n$checkedAt = [DateTimeOffset]::UtcNow.ToString('o')\ntry {\n  $interfaces = @(Get-NetIPConfiguration -All -ErrorAction Stop | Select-Object -First 40 | ForEach-Object {\n    $item = $_\n    $adapterStatus = 'unknown'\n    if ($null -ne $item.NetAdapter -and $null -ne $item.NetAdapter.Status) { $adapterStatus = [string]$item.NetAdapter.Status }\n    $ipv4 = @($item.IPv4Address | ForEach-Object { [string]$_.IPAddress } | Where-Object { $_ })\n    $ipv6 = @($item.IPv6Address | ForEach-Object { [string]$_.IPAddress } | Where-Object { $_ })\n    $gateways = @(@($item.IPv4DefaultGateway | ForEach-Object { [string]$_.NextHop }) + @($item.IPv6DefaultGateway | ForEach-Object { [string]$_.NextHop }) | Where-Object { $_ })\n    $dns = @($item.DNSServer.ServerAddresses | ForEach-Object { [string]$_ } | Where-Object { $_ })\n    $category = 'unknown'\n    $connectivity = 'unknown'\n    if ($null -ne $item.NetProfile) {\n      if ($null -ne $item.NetProfile.NetworkCategory) { $category = [string]$item.NetProfile.NetworkCategory }\n      if ($null -ne $item.NetProfile.IPv4Connectivity) { $connectivity = [string]$item.NetProfile.IPv4Connectivity }\n    }\n    [pscustomobject]@{\n      name = [string]$item.InterfaceAlias\n      adapterStatus = $adapterStatus\n      ipv4Addresses = [string[]]$ipv4\n      ipv6Addresses = [string[]]$ipv6\n      defaultGateways = [string[]]$gateways\n      dnsServers = [string[]]$dns\n      networkCategory = $category\n      ipv4Connectivity = $connectivity\n    }\n  })\n  [pscustomobject]@{ status = 'ok'; checkedAt = $checkedAt; interfaces = [object[]]$interfaces } | ConvertTo-Json -Compress -Depth 8\n} catch {\n  $id = [string]$_.FullyQualifiedErrorId\n  $reason = 'QUERY_FAILED'\n  if ($id -match 'AccessDenied|UnauthorizedAccess') { $reason = 'ACCESS_DENIED' }\n  elseif ($id -match 'CommandNotFound') { $reason = 'COMMAND_UNAVAILABLE' }\n  [pscustomobject]@{ status = 'unavailable'; checkedAt = $checkedAt; reasonCode = $reason } | ConvertTo-Json -Compress -Depth 4\n}";
+const FIREWALL_READ_SCRIPT="$ErrorActionPreference = 'Stop'\n$ProgressPreference = 'SilentlyContinue'\n$utf8 = New-Object System.Text.UTF8Encoding $false\n[Console]::OutputEncoding = $utf8\n$OutputEncoding = $utf8\n$checkedAt = [DateTimeOffset]::UtcNow.ToString('o')\ntry {\n  $profiles = @(Get-NetFirewallProfile -PolicyStore ActiveStore -ErrorAction Stop | ForEach-Object {\n    [pscustomobject]@{\n      name = [string]$_.Name\n      enabled = [bool]$_.Enabled\n      defaultInboundAction = [string]$_.DefaultInboundAction\n      defaultOutboundAction = [string]$_.DefaultOutboundAction\n    }\n  })\n  [pscustomobject]@{ status = 'ok'; checkedAt = $checkedAt; profiles = [object[]]$profiles } | ConvertTo-Json -Compress -Depth 5\n} catch {\n  $id = [string]$_.FullyQualifiedErrorId\n  $reason = 'QUERY_FAILED'\n  if ($id -match 'AccessDenied|UnauthorizedAccess') { $reason = 'ACCESS_DENIED' }\n  elseif ($id -match 'CommandNotFound') { $reason = 'COMMAND_UNAVAILABLE' }\n  [pscustomobject]@{ status = 'unavailable'; checkedAt = $checkedAt; reasonCode = $reason } | ConvertTo-Json -Compress -Depth 4\n}";
+const EVENT_LOG_READ_SCRIPT="$ErrorActionPreference = 'Stop'\n$ProgressPreference = 'SilentlyContinue'\n$utf8 = New-Object System.Text.UTF8Encoding $false\n[Console]::OutputEncoding = $utf8\n$OutputEncoding = $utf8\n$checkedAt = [DateTimeOffset]::UtcNow.ToString('o')\n$windowEnd = Get-Date\n$windowStart = $windowEnd.AddHours(-24)\ntry {\n  $events = @(Get-WinEvent -FilterHashtable @{ LogName = '__LOG_NAME__'; Level = @(2, 3); StartTime = $windowStart; EndTime = $windowEnd } -ErrorAction Stop)\n  $warningCount = @($events | Where-Object { $_.Level -eq 3 }).Count\n  $errorCount = @($events | Where-Object { $_.Level -eq 2 }).Count\n  [pscustomobject]@{\n    status = 'ok'\n    checkedAt = $checkedAt\n    windowStart = $windowStart.ToUniversalTime().ToString('o')\n    windowEnd = $windowEnd.ToUniversalTime().ToString('o')\n    warningCount = [int]$warningCount\n    errorCount = [int]$errorCount\n  } | ConvertTo-Json -Compress -Depth 4\n} catch {\n  $id = [string]$_.FullyQualifiedErrorId\n  if ($id -match 'NoMatchingEventsFound') {\n    [pscustomobject]@{\n      status = 'ok'\n      checkedAt = $checkedAt\n      windowStart = $windowStart.ToUniversalTime().ToString('o')\n      windowEnd = $windowEnd.ToUniversalTime().ToString('o')\n      warningCount = 0\n      errorCount = 0\n    } | ConvertTo-Json -Compress -Depth 4\n  } else {\n    $reason = 'LOG_UNAVAILABLE'\n    if ($id -match 'AccessDenied|UnauthorizedAccess') { $reason = 'ACCESS_DENIED' }\n    elseif ($id -match 'CommandNotFound') { $reason = 'COMMAND_UNAVAILABLE' }\n    [pscustomobject]@{ status = 'unavailable'; checkedAt = $checkedAt; reasonCode = $reason } | ConvertTo-Json -Compress -Depth 4\n  }\n}";
+const eventLogReadScript=name=>EVENT_LOG_READ_SCRIPT.replace('__LOG_NAME__',name);
 const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(value);
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const text=value=>typeof value==='string'&&value.length<=2000;
@@ -384,6 +390,93 @@ export function createOnServer(serverOptions={}) {
         const input=await bounded(()=>jsonBody(req,keys,(_key,value)=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)));
         const output=await bounded(signal=>connections[kind](input,{signal}));
         send(output.status,output.body);return;
+      }
+      if(req.method==='GET'&&url.pathname==='/api/network-status'){
+        const isoNow=()=>new Date().toISOString();
+        const powershellPath=resolve(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
+        const reasonForCode=code=>{
+          if(code==='ACCESS_DENIED')return '현재 사용자 권한으로 이 항목을 읽을 수 없습니다. 권한을 높이지 않았습니다.';
+          if(code==='COMMAND_UNAVAILABLE')return '이 Windows 환경에서 조회 명령 또는 관련 기능을 사용할 수 없습니다.';
+          if(code==='LOG_UNAVAILABLE')return 'Windows 이벤트 로그를 읽지 못했습니다. 권한 또는 로그 상태를 확인하세요.';
+          if(code==='TIMEOUT')return '조회 시간이 초과되어 결과를 확인할 수 없습니다.';
+          if(code==='POWER_SHELL_MISSING')return 'Windows PowerShell 실행 파일을 찾을 수 없어 조회하지 못했습니다.';
+          if(code==='INVALID_OUTPUT')return '조회 결과 형식을 확인할 수 없어 정상 값으로 처리하지 않았습니다.';
+          return '조회 요청이 실패해 현재 값을 확인할 수 없습니다.';
+        };
+        const externalErrorCode=error=>{
+          if(error?.code==='ENOENT')return 'POWER_SHELL_MISSING';
+          if(error?.code==='ETIMEDOUT'||error?.killed===true)return 'TIMEOUT';
+          if(error?.code==='EACCES'||error?.code==='EPERM')return 'ACCESS_DENIED';
+          if(error?.code==='ERR_CHILD_PROCESS_STDIO_MAXBUFFER')return 'INVALID_OUTPUT';
+          return 'QUERY_FAILED';
+        };
+        const runReadOnlyPowerShell=async script=>{
+          assertAlive();
+          const result=await execFileAsync(powershellPath,['-NoLogo','-NoProfile','-NonInteractive','-Command',script],{
+            encoding:'utf8',windowsHide:true,timeout:6500,maxBuffer:1024*1024,signal:lifetime.signal
+          });
+          assertAlive();
+          let parsed;
+          try{parsed=JSON.parse(String(result.stdout||'').trim());}catch{
+            const error=Error('PowerShell output invalid');error.code='INVALID_OUTPUT';throw error;
+          }
+          if(!record(parsed)){const error=Error('PowerShell output invalid');error.code='INVALID_OUTPUT';throw error;}
+          return parsed;
+        };
+        const unavailable=(source,reasonCode,checkedAt=isoNow())=>({status:'unavailable',checkedAt,source,reason:reasonForCode(reasonCode)});
+        const readSection=async(script,source,validate)=>{
+          try{
+            const result=await runReadOnlyPowerShell(script);
+            const checkedAt=typeof result.checkedAt==='string'&&Number.isFinite(Date.parse(result.checkedAt))?result.checkedAt:isoNow();
+            if(result.status==='unavailable')return unavailable(source,typeof result.reasonCode==='string'?result.reasonCode:'QUERY_FAILED',checkedAt);
+            if(result.status!=='ok'||!validate(result))return unavailable(source,'INVALID_OUTPUT',checkedAt);
+            const output={...result,source,checkedAt};
+            delete output.reasonCode;
+            return output;
+          }catch(error){
+            if(lifetime.signal.aborted||requestTimedOut)throw error;
+            return unavailable(source,externalErrorCode(error));
+          }
+        };
+        const validStringArray=value=>Array.isArray(value)&&value.every(item=>typeof item==='string');
+        const network=await readSection(NETWORK_READ_SCRIPT,'Get-NetIPConfiguration -All (읽기 전용)',value=>
+          Array.isArray(value.interfaces)&&value.interfaces.length<=40&&value.interfaces.every(item=>
+            record(item)&&typeof item.name==='string'&&typeof item.adapterStatus==='string'
+            &&validStringArray(item.ipv4Addresses)&&validStringArray(item.ipv6Addresses)
+            &&validStringArray(item.defaultGateways)&&validStringArray(item.dnsServers)
+            &&typeof item.networkCategory==='string'&&typeof item.ipv4Connectivity==='string'));
+        const firewall=await readSection(FIREWALL_READ_SCRIPT,'Get-NetFirewallProfile -PolicyStore ActiveStore (읽기 전용)',value=>
+          Array.isArray(value.profiles)&&value.profiles.length<=10&&value.profiles.every(item=>
+            record(item)&&typeof item.name==='string'&&typeof item.enabled==='boolean'
+            &&typeof item.defaultInboundAction==='string'&&typeof item.defaultOutboundAction==='string'));
+        const readLog=async name=>{
+          const source='Get-WinEvent · '+name+' · 최근 24시간 · Warning/Error';
+          return readSection(eventLogReadScript(name),source,value=>
+            Number.isSafeInteger(value.warningCount)&&value.warningCount>=0
+            &&Number.isSafeInteger(value.errorCount)&&value.errorCount>=0
+            &&typeof value.windowStart==='string'&&Number.isFinite(Date.parse(value.windowStart))
+            &&typeof value.windowEnd==='string'&&Number.isFinite(Date.parse(value.windowEnd)));
+        };
+        const [systemLog,applicationLog]=await Promise.all([readLog('System'),readLog('Application')]);
+        let sdp;
+        if(mode!=='connected'){
+          sdp={status:'disconnected',label:'SDP 미연결',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
+            reason:mode==='demo'?'예제 모드는 실제 SDP 서버 연결이 아닙니다.':'이 실행에는 실제 SDP 서버 연결 경로가 설정되어 있지 않습니다.'};
+        }else{
+          try{
+            assertData('identity',await call('readIdentity'));
+            assertAlive();
+            sdp={status:'connected',label:'SDP 연결 확인',checkedAt:isoNow(),source:'실제 SDP 원천의 본인 identity 조회',
+              reason:'이번 조회에서 SDP 원천의 본인 identity 응답을 정상 확인했습니다.'};
+          }catch(error){
+            if(lifetime.signal.aborted||requestTimedOut)throw error;
+            sdp={status:'unknown',label:'확인 불가',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
+              reason:'SDP 연결 설정이 있어도 이번 원천 조회가 확인되지 않았습니다. 연결 실패인지 확인할 수 없으므로 미연결로 단정하지 않습니다.'};
+          }
+        }
+        assertAlive();
+        send(200,{ok:true,data:{measuredAt:isoNow(),network,firewall,systemLog,applicationLog,sdp}});
+        return;
       }
       if(req.method==='GET'&&url.pathname==='/api/local-system'){
         const gib=1024**3;
