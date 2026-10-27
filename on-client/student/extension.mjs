@@ -485,6 +485,192 @@ export function createStudentView() {
       }
       return root;
     },
+    renderNetworkStatus({ status, data, error, history = [], attemptedAt } = {}) {
+      const root = document.createElement('section');
+      root.className = 'student-network-status';
+
+      const addText = (parent, tag, text, className) => {
+        const node = document.createElement(tag);
+        node.textContent = text;
+        if (className) node.className = className;
+        parent.append(node);
+        return node;
+      };
+      const isText = (value) => typeof value === 'string' && value.length > 0;
+      const timeText = (value) => {
+        if (!isText(value) || !Number.isFinite(Date.parse(value))) return '시각 확인 불가';
+        return new Date(value).toLocaleString('ko-KR');
+      };
+      const fields = (values) => Array.isArray(values) && values.length ? values.join(', ') : '없음/확인된 값 없음';
+      const statusText = (item) => {
+        if (!item) return '확인 불가';
+        if (item.status === 'ok') return '조회 성공';
+        if (item.status === 'unavailable') return '확인 불가 · ' + (isText(item.reason) ? item.reason : '조회 이유를 확인할 수 없습니다.');
+        return '확인 불가';
+      };
+      const section = (title) => {
+        const block = document.createElement('section');
+        block.className = 'network-read-block';
+        addText(block, 'h4', title);
+        return block;
+      };
+      const summarize = (item, kind) => {
+        if (!item) return '확인 불가';
+        if (kind === 'network') {
+          if (item.status !== 'ok') return '확인 불가';
+          if (!Array.isArray(item.interfaces) || item.interfaces.length === 0) return '조회 성공 · 표시할 IP 구성이 없습니다.';
+          return item.interfaces.length + '개 인터페이스 · ' + item.interfaces.map((row) => row.name + ' (' + row.adapterStatus + ')').join(', ');
+        }
+        if (kind === 'firewall') {
+          if (item.status !== 'ok') return '확인 불가';
+          return Array.isArray(item.profiles) && item.profiles.length
+            ? item.profiles.map((row) => row.name + ': ' + (row.enabled ? '사용' : '사용 안 함')).join(', ')
+            : '조회 성공 · 반환된 프로필이 없습니다.';
+        }
+        if (kind === 'systemLog' || kind === 'applicationLog') {
+          return item.status === 'ok'
+            ? '경고 ' + item.warningCount + '건 · 오류 ' + item.errorCount + '건 (최근 24시간)'
+            : '확인 불가';
+        }
+        if (kind === 'sdp') return item.label || (item.status === 'connected' ? 'SDP 연결 확인' : item.status === 'disconnected' ? 'SDP 미연결' : '확인 불가');
+        return '확인 불가';
+      };
+      const names = {
+        network: '네트워크 구성',
+        firewall: '방화벽 설정',
+        systemLog: 'System 이벤트',
+        applicationLog: 'Application 이벤트',
+        sdp: 'SDP 서버 연결',
+      };
+
+      addText(root, 'h3', '네트워크·방화벽·Windows 기록');
+      addText(root, 'p', 'PC 조회는 이 PC의 운영체제에서 읽은 실제 결과입니다. 설명용 예시 값으로 대체하지 않습니다. 조회할 수 없는 항목은 확인 불가로 표시합니다.');
+      addText(root, 'p', 'System·Application 경고/오류 건수는 최근 24시간의 Windows 이벤트 로그 집계일 뿐입니다. 이는 침해·공격 탐지 결과나 감염 여부 판단이 아닙니다.');
+      addText(root, 'p', '방화벽·네트워크 설정은 읽기만 합니다. 설정 변경, 관리자 권한 상승, 공격·침투 재현은 수행하지 않습니다.');
+
+      if (status === 'idle' || status == null) {
+        addText(root, 'p', '아직 조회하지 않았습니다. 「지금 조회」를 눌러 현재 상태를 확인하세요.');
+      } else if (status === 'loading') {
+        addText(root, 'p', '조회 중입니다. 이전 조회 결과는 현재 상태로 대신 표시하지 않습니다.');
+      } else if (status === 'error') {
+        addText(root, 'p', '이번 조회: 확인 불가 · ' + (isText(error?.message) ? error.message : '조회 요청을 완료하지 못했습니다.'));
+        addText(root, 'p', '요청 시각: ' + timeText(attemptedAt));
+      } else if (status === 'ok' && data) {
+        addText(root, 'p', '실제 PC 조회 완료 · 결과 시각: ' + timeText(data.measuredAt));
+
+        const network = section('현재 네트워크 구성');
+        addText(network, 'p', statusText(data.network));
+        if (data.network?.status === 'ok') {
+          if (!data.network.interfaces.length) addText(network, 'p', '조회 성공이지만 IP 구성을 반환한 인터페이스가 없습니다.');
+          for (const item of data.network.interfaces) {
+            const block = document.createElement('div');
+            block.className = 'network-interface';
+            addText(block, 'h4', (isText(item.name) ? item.name : '이름 확인 불가') + ' · 상태: ' + (isText(item.adapterStatus) ? item.adapterStatus : '확인 불가'));
+            addText(block, 'p', 'IPv4: ' + fields(item.ipv4Addresses) + ' · IPv6: ' + fields(item.ipv6Addresses));
+            addText(block, 'p', '기본 게이트웨이: ' + fields(item.defaultGateways) + ' · DNS: ' + fields(item.dnsServers));
+            addText(block, 'p', '네트워크 범주: ' + (item.networkCategory || '확인 불가') + ' · IPv4 연결 상태: ' + (item.ipv4Connectivity || '확인 불가'));
+            network.append(block);
+          }
+        }
+        addText(network, 'p', '측정 시각: ' + timeText(data.network?.checkedAt) + ' · 출처: ' + (data.network?.source || '확인 불가'));
+        root.append(network);
+
+        const firewall = section('Windows 방화벽 프로필');
+        addText(firewall, 'p', statusText(data.firewall));
+        if (data.firewall?.status === 'ok') {
+          if (!data.firewall.profiles.length) addText(firewall, 'p', '프로필 정보가 반환되지 않았습니다.');
+          for (const profile of data.firewall.profiles) {
+            addText(firewall, 'p', profile.name + ' · 방화벽: ' + (profile.enabled ? '사용(Enabled)' : '사용 안 함(Disabled)')
+              + ' · 인바운드 기본 동작: ' + profile.defaultInboundAction
+              + ' · 아웃바운드 기본 동작: ' + profile.defaultOutboundAction);
+          }
+        }
+        addText(firewall, 'p', '측정 시각: ' + timeText(data.firewall?.checkedAt) + ' · 출처: ' + (data.firewall?.source || '확인 불가'));
+        root.append(firewall);
+
+        for (const key of ['systemLog', 'applicationLog']) {
+          const log = data[key];
+          const block = section(key === 'systemLog' ? 'Windows System 이벤트 로그' : 'Windows Application 이벤트 로그');
+          addText(block, 'p', statusText(log));
+          if (log?.status === 'ok') {
+            addText(block, 'p', '경고: ' + log.warningCount + '건 · 오류: ' + log.errorCount + '건');
+            addText(block, 'p', '조회 범위: ' + timeText(log.windowStart) + ' ~ ' + timeText(log.windowEnd));
+          }
+          addText(block, 'p', '측정 시각: ' + timeText(log?.checkedAt) + ' · 출처: ' + (log?.source || 'Get-WinEvent'));
+          root.append(block);
+        }
+
+        const sdpBlock = section('SDP 서버 연결 상태');
+        const sdpLabel = data.sdp?.status === 'connected' ? 'SDP 연결 확인'
+          : data.sdp?.status === 'disconnected' ? 'SDP 미연결' : '확인 불가';
+        addText(sdpBlock, 'p', sdpLabel);
+        addText(sdpBlock, 'p', isText(data.sdp?.reason) ? data.sdp.reason : '연결 상태를 확인할 수 없습니다.');
+        addText(sdpBlock, 'p', '확인 시각: ' + timeText(data.sdp?.checkedAt) + ' · 근거: ' + (data.sdp?.source || '확인 불가'));
+        addText(sdpBlock, 'p', 'PC 네트워크 조회 성공은 SDP 서버 연결을 의미하지 않습니다.');
+        root.append(sdpBlock);
+      } else {
+        addText(root, 'p', '확인 불가: 조회 상태의 형식을 확인할 수 없습니다.');
+      }
+
+      const categories = [
+        ['all', '전체'], ['network', '네트워크'], ['firewall', '방화벽'],
+        ['systemLog', 'System'], ['applicationLog', 'Application'], ['sdp', 'SDP 연결'],
+      ];
+      const records = [];
+      for (const sample of (Array.isArray(history) ? history : [])) {
+        for (const kind of ['network', 'firewall', 'systemLog', 'applicationLog', 'sdp']) {
+          const item = sample?.[kind];
+          if (item) records.push({ kind, at: item.checkedAt || sample.measuredAt, status: item.status, summary: summarize(item, kind) });
+        }
+      }
+      records.sort((a, b) => {
+        const ta = Date.parse(a.at), tb = Date.parse(b.at);
+        if (!Number.isFinite(ta) || !Number.isFinite(tb)) return Number.isFinite(ta) ? -1 : Number.isFinite(tb) ? 1 : 0;
+        return tb - ta;
+      });
+
+      if (records.length) {
+        addText(root, 'h4', '조회 기록 타임라인 (최근 10회 조회)');
+        const filterBar = document.createElement('div');
+        filterBar.className = 'row network-filter';
+        const label = document.createElement('label');
+        label.textContent = '기록 종류 ';
+        const select = document.createElement('select');
+        select.className = 'network-filter-select';
+        select.setAttribute('aria-label', '타임라인 기록 종류 필터');
+        for (const [value, title] of categories) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = title;
+          select.append(option);
+        }
+        label.append(select);
+        filterBar.append(label);
+        const list = document.createElement('ol');
+        list.className = 'network-timeline';
+        const renderRecords = () => {
+          list.replaceChildren();
+          const visible = records.filter((row) => select.value === 'all' || row.kind === select.value);
+          if (!visible.length) {
+            addText(list, 'li', '선택한 종류의 기록이 없습니다.');
+            return;
+          }
+          for (const row of visible) {
+            const item = document.createElement('li');
+            item.className = 'network-timeline-item';
+            addText(item, 'strong', names[row.kind] + ' · ' + (row.status === 'ok' || row.status === 'connected' ? '조회 확인' : row.status === 'disconnected' ? 'SDP 미연결' : '확인 불가'));
+            addText(item, 'p', timeText(row.at));
+            addText(item, 'p', row.summary);
+            list.append(item);
+          }
+        };
+        select.addEventListener('change', renderRecords);
+        renderRecords();
+        root.append(filterBar, list);
+        addText(root, 'p', '타임라인은 조회 시각 기준 최신순이며, 종류별로 걸러 볼 수 있습니다. 최근 10회 조회 이력은 화면이 열린 동안 메모리에만 보관됩니다. 새로고침/재접속 시 사라지며 외부로 전송하지 않습니다.');
+      }
+      return root;
+    },
     renderStatus({ devices, sessions, notifications, diagnostics, mode } = {}) {
       const root = document.createElement('section');
       root.className = 'student-status';
