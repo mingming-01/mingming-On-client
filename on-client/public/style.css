@@ -161,6 +161,16 @@ main:focus { outline: none; }
 .explanation p { margin: 4px 0 0; white-space: pre-wrap; }
 
 .student-slot { min-height: 40px; }
+.network-read-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin: 10px 0; overflow-wrap: anywhere; }
+.network-read-block h4 { margin-bottom: 8px; }
+.network-read-block p { margin: 5px 0; }
+.network-interface { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px; }
+.network-filter { margin: 8px 0; align-items: center; }
+.network-filter label { display: flex; gap: 8px; align-items: center; }
+.network-filter-select { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.network-timeline { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.network-timeline-item { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; overflow-wrap: anywhere; }
+.network-timeline-item p { margin: 4px 0 0; }
 .student-text { margin: 0; white-space: pre-wrap; }
 #action-result, #student-action { overflow-wrap: anywhere; margin-bottom: 12px; }
 #action-result p { margin: 6px 0; }
