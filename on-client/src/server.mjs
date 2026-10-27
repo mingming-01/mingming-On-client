@@ -413,7 +413,7 @@ export function createOnServer(serverOptions={}) {
         const runReadOnlyPowerShell=async script=>{
           assertAlive();
           const result=await execFileAsync(powershellPath,['-NoLogo','-NoProfile','-NonInteractive','-Command',script],{
-            encoding:'utf8',windowsHide:true,timeout:6500,maxBuffer:1024*1024,signal:lifetime.signal
+            encoding:'utf8',windowsHide:true,timeout:12000,maxBuffer:1024*1024,signal:lifetime.signal
           });
           assertAlive();
           let parsed;
@@ -445,10 +445,13 @@ export function createOnServer(serverOptions={}) {
             &&validStringArray(item.ipv4Addresses)&&validStringArray(item.ipv6Addresses)
             &&validStringArray(item.defaultGateways)&&validStringArray(item.dnsServers)
             &&typeof item.networkCategory==='string'&&typeof item.ipv4Connectivity==='string'));
-        const firewallPromise=readSection(FIREWALL_READ_SCRIPT,'Get-NetFirewallProfile -PolicyStore ActiveStore (읽기 전용)',value=>
-          Array.isArray(value.profiles)&&value.profiles.length<=10&&value.profiles.every(item=>
-            record(item)&&typeof item.name==='string'&&typeof item.enabled==='boolean'
-            &&typeof item.defaultInboundAction==='string'&&typeof item.defaultOutboundAction==='string'));
+        const firewallPromise=readSection(FIREWALL_READ_SCRIPT,'Get-NetFirewallProfile -PolicyStore ActiveStore (읽기 전용)',value=>{
+          const profiles=Array.isArray(value.profiles)?value.profiles:record(value.profiles)?[value.profiles]:null;
+          return profiles!==null&&profiles.length<=10&&profiles.every(item=>
+            record(item)&&typeof item.name==='string'
+            &&(typeof item.enabled==='boolean'||typeof item.enabled==='string')
+            &&typeof item.defaultInboundAction==='string'&&typeof item.defaultOutboundAction==='string');
+        });
         const readLog=async name=>{
           const source='Get-WinEvent · '+name+' · 최근 24시간 · Warning/Error';
           return readSection(eventLogReadScript(name),source,value=>
@@ -482,9 +485,18 @@ export function createOnServer(serverOptions={}) {
               reason:'SDP 연결 설정이 있어도 이번 원천 조회가 확인되지 않았습니다. 연결 실패인지 확인할 수 없으므로 미연결로 단정하지 않습니다.'};
           }
         })();
-        const [network,firewall,systemLog,applicationLog,sdp]=await Promise.all([
+        const [network,firewallRead,systemLog,applicationLog,sdp]=await Promise.all([
           networkPromise,firewallPromise,readLog('System'),readLog('Application'),sdpPromise
         ]);
+        const firewall=firewallRead.status==='ok'
+          ? {...firewallRead,profiles:(Array.isArray(firewallRead.profiles)?firewallRead.profiles:record(firewallRead.profiles)?[firewallRead.profiles]:[]).map(item=>({
+              name:item.name,
+              enabled:item.enabled===true||/^(true|enabled)$/i.test(String(item.enabled))?true
+                :item.enabled===false||/^(false|disabled)$/i.test(String(item.enabled))?false:null,
+              defaultInboundAction:item.defaultInboundAction,
+              defaultOutboundAction:item.defaultOutboundAction
+            }))}
+          :firewallRead;
         assertAlive();
         send(200,{ok:true,data:{measuredAt:isoNow(),network,firewall,systemLog,applicationLog,sdp}});
         return;
