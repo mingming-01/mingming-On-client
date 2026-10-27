@@ -89,7 +89,7 @@ Git Bash를 앱 폴더 on-client에서 열고 실행합니다. 출력 경로는 
 
 - --source에는 on-client 폴더를 지정합니다. 현재 폴더에서 실행할 때는 .을 사용합니다.
 - --out은 생성할 패키지 폴더의 경로입니다. 부모 폴더는 자동으로 만들지만, 대상 폴더 또는 같은 이름의 ZIP이 이미 있으면 덮어쓰지 않고 중단합니다. 저장소 안에는 출력할 수 없습니다.
-- --iconPath는 선택 사항입니다. 생략하면 저장소의 기존 public/assets/alekov/alekov-app-icon.webp를 256x256 PNG로 변환해 패키지에 넣습니다. 변환을 사용할 수 없는 PC에서는 --iconPath와 함께 별도 256x256 PNG를 지정해야 합니다.
+- --iconPath는 선택 사항입니다. 생략하면 기존 public/assets/alekov/alekov-app-icon.webp를 256x256 PNG로 변환합니다. Windows나 ImageMagick에서 WEBP 변환이 불가능해도 기본 방패 아이콘을 자동 생성하므로 아이콘을 별도로 준비할 필요가 없습니다. 자체 아이콘을 쓰려면 --iconPath로 256x256 PNG를 지정합니다.
 - 생성 결과에는 INSTALL.md와 APP_PACKAGE_MANIFEST.json이 포함됩니다. 매니페스트는 파일 해시와 소스 커밋을 기록합니다.
 - 이 저장소에서는 승인된 운영 호스트 런타임·바로가기 등록 규격·운영 앱 승인 키의 검증 방식을 확인하지 못했습니다. 따라서 패키지 도구는 승인된 바탕화면 바로가기를 생성하지 않으며, INSTALL.md와 매니페스트에 운영자 준비 필요를 기록합니다.
 - PROVIDED_RUNTIME_NOT_INSTALLED 상태이거나 운영 앱 승인 키가 없거나 검증되지 않았다면 실행을 멈추고 담당 운영자에게 준비를 요청합니다. 승인 절차를 우회하거나 --app-only-v1 옵션으로 대체하지 않습니다.
