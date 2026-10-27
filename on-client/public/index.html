@@ -87,6 +87,15 @@
           <div id="student-local-system" class="student-slot" aria-live="polite"></div>
         </section>
 
+        <section class="card student" aria-labelledby="network-status-title">
+          <h2 id="network-status-title">네트워크·방화벽·Windows 기록 <span class="tag tag-student">학생 구현 · 읽기 전용</span></h2>
+          <p class="muted">현재 PC의 네트워크 구성, Windows 방화벽 프로필, System·Application 로그의 최근 24시간 경고·오류 건수를 조회합니다. 이 건수는 침해나 공격 탐지 결과가 아닙니다. 설정 변경이나 공격 재현은 하지 않습니다.</p>
+          <div class="row">
+            <button type="button" id="network-status-refresh" class="btn">지금 조회</button>
+          </div>
+          <div id="student-network-status" class="student-slot" aria-live="polite"></div>
+        </section>
+
         <section class="card provided" aria-labelledby="diag-title">
           <h2 id="diag-title">도움정보 <span class="tag">제공</span></h2>
           <p class="muted">서버의 비밀 없는 연결 점검 결과를 불러와 직접 확인한 뒤 복사할 수 있습니다. 자동으로 전송하지 않습니다.</p>
