@@ -56,6 +56,7 @@ const state = {
   access: { status: 'idle' },
   diagnostics: { status: 'idle' },
   localSystem: { status: 'idle', history: [] },
+  networkStatus: { status: 'idle', history: [] },
   vulnerabilities: { status: 'idle' },
   aiConnection: { status: 'idle' },
   selectedExplanation: { event: null, resource: { status: 'idle' } },
@@ -1184,6 +1185,7 @@ function studentData(kind) {
   if (kind === 'explanation') return structuredClone({ event: state.selectedExplanation.event, explanation: snapshot(state.selectedExplanation.resource), checkedAt: state.selectedExplanation.resource.meta?.checkedAt ?? null });
   if (kind === 'vulnerabilities') return snapshot(state.vulnerabilities);
   if (kind === 'localSystem') return structuredClone(state.localSystem);
+  if (kind === 'networkStatus') return structuredClone(state.networkStatus);
   if (kind === 'identity') return { me: snapshot(state.me), devices: snapshot(state.devices), sessions: snapshot(state.sessions) };
   if (kind === 'decision') {
     const access = state.access;
@@ -1273,12 +1275,96 @@ async function loadLocalSystem() {
   }
 }
 
+function validNetworkStatusData(data) {
+  const validTime = (value) => isText(value) && Number.isFinite(Date.parse(value));
+  const validRead = (value) => isRecord(value) && ['ok', 'unavailable'].includes(value.status)
+    && validTime(value.checkedAt) && isText(value.source)
+    && (value.status === 'ok' || isText(value.reason));
+  if (!isRecord(data) || !validTime(data.measuredAt)) return false;
+  if (!validRead(data.network) || !validRead(data.firewall)
+    || !validRead(data.systemLog) || !validRead(data.applicationLog)) return false;
+
+  const stringArray = (value) => Array.isArray(value) && value.every((item) => typeof item === 'string');
+  if (data.network.status === 'ok'
+    && (!Array.isArray(data.network.interfaces) || data.network.interfaces.length > 40
+      || !data.network.interfaces.every((item) => isRecord(item)
+        && typeof item.name === 'string' && typeof item.adapterStatus === 'string'
+        && stringArray(item.ipv4Addresses) && stringArray(item.ipv6Addresses)
+        && stringArray(item.defaultGateways) && stringArray(item.dnsServers)
+        && typeof item.networkCategory === 'string' && typeof item.ipv4Connectivity === 'string'))) return false;
+
+  if (data.firewall.status === 'ok'
+    && (!Array.isArray(data.firewall.profiles) || data.firewall.profiles.length > 10
+      || !data.firewall.profiles.every((item) => isRecord(item)
+        && typeof item.name === 'string' && typeof item.enabled === 'boolean'
+        && typeof item.defaultInboundAction === 'string' && typeof item.defaultOutboundAction === 'string'))) return false;
+
+  for (const item of [data.systemLog, data.applicationLog]) {
+    if (item.status === 'ok'
+      && (!Number.isSafeInteger(item.warningCount) || item.warningCount < 0
+        || !Number.isSafeInteger(item.errorCount) || item.errorCount < 0
+        || !validTime(item.windowStart) || !validTime(item.windowEnd))) return false;
+  }
+  return isRecord(data.sdp)
+    && ['connected', 'disconnected', 'unknown'].includes(data.sdp.status)
+    && validTime(data.sdp.checkedAt) && isText(data.sdp.source)
+    && isText(data.sdp.label) && isText(data.sdp.reason);
+}
+
+let networkStatusGeneration = 0;
+async function loadNetworkStatus() {
+  const button = $('network-status-refresh');
+  if (button.disabled) return;
+  const currentGeneration = ++networkStatusGeneration;
+  const history = state.networkStatus.history || [];
+  const attemptedAt = new Date().toISOString();
+  state.networkStatus = { status: 'loading', history, attemptedAt };
+  button.disabled = true;
+  button.textContent = '조회 중…';
+  renderStudent('networkStatus');
+
+  try {
+    const result = await request('/api/network-status');
+    if (currentGeneration !== networkStatusGeneration) return;
+    if (result.ok && validNetworkStatusData(result.data)) {
+      const data = structuredClone(result.data);
+      state.networkStatus = {
+        status: 'ok',
+        data,
+        history: [...history, data].slice(-10),
+        attemptedAt,
+      };
+    } else if (result.ok) {
+      state.networkStatus = {
+        status: 'error',
+        error: { code: 'INVALID_RESPONSE', message: '조회 결과의 형식이 올바르지 않아 현재 상태로 인정하지 않았습니다.' },
+        history,
+        attemptedAt,
+      };
+    } else {
+      state.networkStatus = {
+        status: 'error',
+        error: { code: result.error?.code || 'NETWORK_STATUS_UNAVAILABLE', message: result.error?.message || '네트워크 상태를 조회하지 못했습니다.' },
+        history,
+        attemptedAt,
+      };
+    }
+    renderStudent('networkStatus');
+  } finally {
+    if (currentGeneration === networkStatusGeneration) {
+      button.disabled = false;
+      button.textContent = '지금 조회';
+    }
+  }
+}
+
 const STUDENT_SLOTS = {
   identity: { slot: 'student-identity', fn: 'renderIdentity' },
   decision: { slot: 'student-decision', fn: 'renderDecision' },
   events: { slot: 'student-events', fn: 'renderEvents' },
   status: { slot: 'student-status', fn: 'renderStatus' },
   localSystem: { slot: 'student-local-system', fn: 'renderLocalSystem' },
+  networkStatus: { slot: 'student-network-status', fn: 'renderNetworkStatus' },
   vulnerabilities: { slot: 'student-vulnerabilities', fn: 'renderVulnerabilities' },
   aiConnection: { slot: 'student-ai-connection', fn: 'renderAiConnection' },
   explanation: { slot: 'student-explanation', fn: 'renderExplanation' },
@@ -1404,6 +1490,7 @@ function init() {
   $('refresh').addEventListener('click', () => loadAll());
   $('diag-load').addEventListener('click', () => loadDiagnostics());
   $('local-system-refresh').addEventListener('click', () => loadLocalSystem());
+  $('network-status-refresh').addEventListener('click', () => loadNetworkStatus());
   $('diag-copy').addEventListener('click', () => copyDiagnostics());
   $('vulnerabilities-load').addEventListener('click', () => loadVulnerabilities());
   $('vulnerabilities-cancel').addEventListener('click', () => cancelVulnerabilities());
