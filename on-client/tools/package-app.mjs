@@ -258,6 +258,7 @@ const approvedDocs = new Set([
   'docs/LOCAL_SYSTEM_STATUS.md',
   'docs/NETWORK_STATUS.md',
   'docs/QUICK_START.md',
+  'docs/DAY7_DEMO_AND_EVIDENCE.md',
 ]);
 
 function isSafePackageFile(file) {
@@ -290,6 +291,7 @@ const requiredFiles = [
   'tools/start-alekov.ps1',
   'tools/launch-mingming.ps1',
   'docs/QUICK_START.md',
+  'docs/DAY7_DEMO_AND_EVIDENCE.md',
 ];
 for (const relative of requiredFiles) {
   if (!files.includes(prefix + relative)) {
