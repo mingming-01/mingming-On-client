@@ -8,6 +8,7 @@ import {
   readFileSync,
   unlinkSync,
   readdirSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -321,6 +322,21 @@ if (existsSync(packageRoot) || existsSync(zipPath)) {
   throw new Error('출력 폴더 또는 ZIP이 이미 있습니다. 기존 결과를 덮어쓰지 않았습니다: ' + packageRoot);
 }
 
+const desktopPath = run('powershell.exe', [
+  '-NoProfile',
+  '-ExecutionPolicy',
+  'Bypass',
+  '-Command',
+  "[Environment]::GetFolderPath('Desktop')",
+]);
+if (!desktopPath || !existsSync(desktopPath)) {
+  throw new Error('바탕화면 경로를 확인하지 못해 시연 바로가기를 만들 수 없습니다.');
+}
+const shortcutPath = path.join(desktopPath, folderName + '-시연모드.lnk');
+if (existsSync(shortcutPath)) {
+  throw new Error('같은 이름의 시연 바로가기가 이미 있습니다. 기존 바로가기는 덮어쓰지 않았습니다: ' + shortcutPath);
+}
+
 const iconRelative = 'public/assets/alekov/alekov-app-icon.png';
 let iconSourcePath;
 let iconSourceKind;
@@ -374,7 +390,8 @@ const installGuide = [
   '',
   '## 운영 실행 전 필수 확인',
   '',
-  '이 저장소에는 승인된 운영 호스트 런타임의 설치 명령, 등록된 호스트 바로가기 규격 또는 운영 앱 승인 키 검증 규격이 확인되지 않습니다. 이 패키지는 승인된 실행 수단을 대신 만들지 않으며 자동 바탕화면 바로가기도 생성하지 않습니다.',
+  '이 패키지 도구는 바탕화면에 ' + folderName + '-시연모드.lnk 시연 전용 바로가기를 생성합니다. 이 바로가기는 -Demo 예제 모드만 실행하며 승인된 운영 바로가기가 아닙니다.',
+  '이 저장소에서는 승인된 운영 호스트 런타임의 설치 명령, 등록된 호스트 바로가기 규격 또는 운영 앱 승인 키 검증 규격이 확인되지 않았습니다. 운영 실행은 운영자 준비가 필요합니다.',
   '',
   '- 런타임 상태가 PROVIDED_RUNTIME_NOT_INSTALLED이면 실행을 중단하고 운영자 준비가 필요합니다.',
   '- 운영 앱 승인 키가 없거나 검증되지 않은 경우에도 실행을 중단하고 운영자 준비가 필요합니다.',
@@ -439,9 +456,15 @@ const manifest = {
     source: iconSourceKind,
   },
   start: {
-    script: null,
+    script: 'tools/launch-mingming.ps1',
     defaultUrl: 'http://127.0.0.1:5189/',
-    defaultMode: 'disconnected unless a connection is explicitly configured',
+    defaultMode: 'desktop shortcut uses demo data; a normal launch is disconnected unless explicitly configured',
+    demoShortcut: {
+      created: true,
+      name: folderName + '-시연모드.lnk',
+      mode: 'demo',
+      externalToPackageFolder: true,
+    },
     approvedHostShortcut: 'not-created',
   },
   hostExecution: {
@@ -501,8 +524,9 @@ if (checkedManifest.hostExecution.status !== 'operator-preparation-required'
 }
 if (!checkedInstall.includes('PROVIDED_RUNTIME_NOT_INSTALLED')
     || !checkedInstall.includes('--app-only-v1')
-    || !checkedInstall.includes('운영자 준비가 필요')) {
-  throw new Error('패키지 검증 실패: INSTALL.md의 운영자 준비 안내가 누락되었습니다.');
+    || !checkedInstall.includes('운영자 준비가 필요')
+    || !checkedInstall.includes('-Demo 예제 모드')) {
+  throw new Error('패키지 검증 실패: INSTALL.md의 시연/운영 준비 안내가 누락되었습니다.');
 }
 
 const zipCommand = '$ErrorActionPreference = "Stop"; Compress-Archive -LiteralPath '
@@ -513,10 +537,39 @@ if (!existsSync(zipPath) || statSync(zipPath).size === 0) {
   throw new Error('ZIP 생성 결과를 검증하지 못했습니다: ' + zipPath);
 }
 
+const powershellPath = path.join(
+  process.env.SystemRoot || 'C:\\Windows',
+  'System32',
+  'WindowsPowerShell',
+  'v1.0',
+  'powershell.exe',
+);
+const startScript = path.join(packageRoot, 'tools', 'launch-mingming.ps1');
+const shortcutArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + startScript + '" -Demo -Port 5189';
+const shortcutCommand = '$ErrorActionPreference = "Stop"; '
+  + '$shell = New-Object -ComObject WScript.Shell; '
+  + '$shortcut = $shell.CreateShortcut(' + quotePowerShell(shortcutPath) + '); '
+  + '$shortcut.TargetPath = ' + quotePowerShell(powershellPath) + '; '
+  + '$shortcut.Arguments = ' + quotePowerShell(shortcutArgs) + '; '
+  + '$shortcut.WorkingDirectory = ' + quotePowerShell(packageRoot) + '; '
+  + '$shortcut.Description = "밍밍 시연 모드 — 설명용 예제 데이터"; '
+  + '$shortcut.Save()';
+try {
+  run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', shortcutCommand]);
+  if (!existsSync(shortcutPath)) throw new Error('바탕화면 시연 바로가기를 확인할 수 없습니다.');
+} catch (error) {
+  // 이 호출에서 생성한 결과만 정리합니다. 기존 폴더·ZIP·바로가기는 생성 전 검사에서 제외했습니다.
+  try { rmSync(packageRoot, { recursive: true, force: true }); } catch {}
+  try { if (existsSync(zipPath)) unlinkSync(zipPath); } catch {}
+  try { if (existsSync(shortcutPath)) unlinkSync(shortcutPath); } catch {}
+  throw new Error('시연 바로가기를 만들지 못해 이번 실행에서 만든 패키지 결과만 정리했습니다: ' + error.message);
+}
+
 console.log('밍밍 보안 Agent 패키지 생성 및 기본 검증 완료');
 console.log('패키지 폴더: ' + packageRoot);
 console.log('ZIP: ' + zipPath);
 console.log('매니페스트: ' + manifestPath);
 console.log('아이콘: ' + path.join(packageRoot, iconRelative));
-console.log('운영 실행 승인: 미확인 — 운영자 준비 필요. 승인된 바로가기는 생성하지 않았습니다.');
+console.log('바탕화면 시연 바로가기: ' + shortcutPath);
+console.log('주의: 바로가기는 -Demo 예제 모드 전용입니다. 운영 실행 승인은 미확인 — 운영자 준비가 필요합니다.');
 console.log('주의: 개인 SDP 연결 설정, 인증 자료 및 운영 앱 승인 키는 패키지에 포함하지 않았습니다.');
