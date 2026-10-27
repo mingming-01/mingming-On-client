@@ -451,7 +451,8 @@ export function createStudentView() {
           const filterControls = new Map();
 
           const searchableText = (event) => [
-            event.id, event.summary, event.appId, event.at,
+            event.id, event.summary, event.appId, event.at, event.kind,
+            event.state?.access, event.state?.session, event.state?.device,
             ...(Array.isArray(event.evidence) ? event.evidence.flatMap((row) => [row?.id, row?.text]) : []),
             ...(Array.isArray(event.rules) ? event.rules.flatMap((row) => [row?.id, row?.text]) : []),
           ].filter(isText).join(' ').toLocaleLowerCase();
@@ -463,14 +464,14 @@ export function createStudentView() {
 
           const updateSummary = (rows) => {
             summaryArea.replaceChildren();
-            const denied = rows.filter((event) => event.state?.access === 'denied').length;
-            const unknown = rows.filter((event) => event.state?.access === 'unknown').length;
+            const denied = rows.filter((event) => event.kind === 'access' && event.state?.access === 'denied').length;
+            const unknown = rows.filter((event) => event.kind === 'access' && event.state?.access === 'unknown').length;
             const values = [
               '현재 조건 ' + rows.length + '건',
               '접속 기록 ' + rows.filter((event) => event.kind === 'access').length + '건',
               'XDR 경보 기록 ' + rows.filter((event) => event.kind === 'xdr').length + '건',
-              '접속 거부 ' + denied + '건',
-              '접속 확인 불가 ' + unknown + '건',
+              '접속 거부 상태 ' + denied + '건',
+              '접속 상태 확인 불가 ' + unknown + '건',
             ];
             for (const value of values) {
               const tag = addText(summaryArea, 'span', value);
