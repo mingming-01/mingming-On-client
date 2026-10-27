@@ -44,7 +44,7 @@ export function createStudentView() {
       '.student-events-search { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }',
       '.student-events-search input { flex: 1; min-width: 220px; min-height: 40px; }',
       '.student-events-actions { display: flex; gap: 8px; flex-wrap: wrap; }',
-      '.student-events-status { min-height: 1.4em; }',
+      '.student-events-status { flex-basis: 100%; min-height: 1.4em; margin: 0; }',
       '.student-refresh-button { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; font-weight: 600; }',
       '.student-refresh-feedback { font-size: .9rem; color: var(--muted); }',
       '.student-loading-spinner { width: 14px; height: 14px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: student-refresh-spin .8s linear infinite; }',
@@ -418,7 +418,7 @@ export function createStudentView() {
           searchInput.id = 'student-events-search';
           searchInput.type = 'search';
           searchInput.autocomplete = 'off';
-          searchInput.placeholder = '사건 ID, 요약, 앱, 근거, 규칙 검색';
+          searchInput.placeholder = '사건 ID, 요약, 앱, 상태, 근거, 규칙 검색';
           searchInput.setAttribute('aria-label', '보안 기록 검색어');
           searchInput.addEventListener('input', () => {
             filters.query = searchInput.value.trim().toLocaleLowerCase();
@@ -443,6 +443,8 @@ export function createStudentView() {
           const summaryArea = document.createElement('div');
           summaryArea.className = 'student-events-summary';
           summaryArea.setAttribute('aria-label', '현재 필터 결과 요약');
+          summaryArea.setAttribute('role', 'status');
+          summaryArea.setAttribute('aria-live', 'polite');
 
           const listArea = document.createElement('div');
           const detailArea = document.createElement('div');
