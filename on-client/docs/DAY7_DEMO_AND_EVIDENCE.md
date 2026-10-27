@@ -88,7 +88,7 @@ npm run demo
 시연 후 별도 포장을 만들려면 `on-client`에서 다음과 같이 새 경로를 사용합니다. 아래 명령은 패키지 생성만 하며 승인된 운영 바로가기를 만들지는 않습니다.
 
 ```bash
-npm run package-app -- --source . --out "C:\\Users\\<사용자>\\Desktop\\밍밍-7일차-시연패키지"
+npm run package-app -- --source . --out "$USERPROFILE/Desktop/밍밍-7일차-시연패키지"
 ```
 
 위 경로의 `<사용자>`는 설명용 자리표시자입니다. 실제 PC에서 사용할 경로로 바꾸고, 출력 폴더와 같은 이름의 ZIP이 없는지 먼저 확인합니다. 실행 후 매니페스트의 `source.commit`과 `git rev-parse HEAD`가 같은지 확인하고, ZIP 무결성 검사와 아이콘 확인을 다시 합니다. 소스가 수정된 뒤에는 기존 패키지를 최종 패키지라고 부르지 않습니다.
