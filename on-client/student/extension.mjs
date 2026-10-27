@@ -607,6 +607,7 @@ export function createStudentView() {
         addText(sdpBlock, 'p', isText(data.sdp?.reason) ? data.sdp.reason : '연결 상태를 확인할 수 없습니다.');
         addText(sdpBlock, 'p', '확인 시각: ' + timeText(data.sdp?.checkedAt) + ' · 근거: ' + (data.sdp?.source || '확인 불가'));
         addText(sdpBlock, 'p', 'PC 네트워크 조회 성공은 SDP 서버 연결을 의미하지 않습니다.');
+        addText(sdpBlock, 'p', 'SDP 연결 확인은 원천 identity 조회만 사용합니다. 이 PC의 네트워크·방화벽·이벤트 집계 결과를 SDP 서버로 보내지 않습니다.');
         root.append(sdpBlock);
       } else {
         addText(root, 'p', '확인 불가: 조회 상태의 형식을 확인할 수 없습니다.');
