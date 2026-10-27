@@ -458,9 +458,14 @@ export function createOnServer(serverOptions={}) {
             &&typeof value.windowEnd==='string'&&Number.isFinite(Date.parse(value.windowEnd)));
         };
         const sdpPromise=(async()=>{
-          if(mode!=='connected'){
+          const sourceMode=engine?.evidenceMode;
+          if(sourceMode==='demo'||sourceMode==='disconnected'){
             return {status:'disconnected',label:'SDP 미연결',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
-              reason:mode==='demo'?'예제 모드는 실제 SDP 서버 연결이 아닙니다.':'이 실행에는 실제 SDP 서버 연결 경로가 설정되어 있지 않습니다.'};
+              reason:sourceMode==='demo'?'예제 모드는 실제 SDP 서버 연결이 아닙니다.':'이 실행에는 실제 SDP 서버 연결 경로가 설정되어 있지 않습니다.'};
+          }
+          if(sourceMode!=='connected'){
+            return {status:'unknown',label:'확인 불가',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
+              reason:'서버 연결 어댑터가 실제 SDP 연결 상태를 확인할 수 있는 모드를 제공하지 않아 미연결로 단정하지 않습니다.'};
           }
           try{
             assertData('identity',await call('readIdentity'));
