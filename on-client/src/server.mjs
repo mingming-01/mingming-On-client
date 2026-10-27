@@ -439,13 +439,13 @@ export function createOnServer(serverOptions={}) {
           }
         };
         const validStringArray=value=>Array.isArray(value)&&value.every(item=>typeof item==='string');
-        const network=await readSection(NETWORK_READ_SCRIPT,'Get-NetIPConfiguration -All (읽기 전용)',value=>
+        const networkPromise=readSection(NETWORK_READ_SCRIPT,'Get-NetIPConfiguration -All (읽기 전용)',value=>
           Array.isArray(value.interfaces)&&value.interfaces.length<=40&&value.interfaces.every(item=>
             record(item)&&typeof item.name==='string'&&typeof item.adapterStatus==='string'
             &&validStringArray(item.ipv4Addresses)&&validStringArray(item.ipv6Addresses)
             &&validStringArray(item.defaultGateways)&&validStringArray(item.dnsServers)
             &&typeof item.networkCategory==='string'&&typeof item.ipv4Connectivity==='string'));
-        const firewall=await readSection(FIREWALL_READ_SCRIPT,'Get-NetFirewallProfile -PolicyStore ActiveStore (읽기 전용)',value=>
+        const firewallPromise=readSection(FIREWALL_READ_SCRIPT,'Get-NetFirewallProfile -PolicyStore ActiveStore (읽기 전용)',value=>
           Array.isArray(value.profiles)&&value.profiles.length<=10&&value.profiles.every(item=>
             record(item)&&typeof item.name==='string'&&typeof item.enabled==='boolean'
             &&typeof item.defaultInboundAction==='string'&&typeof item.defaultOutboundAction==='string'));
@@ -457,7 +457,9 @@ export function createOnServer(serverOptions={}) {
             &&typeof value.windowStart==='string'&&Number.isFinite(Date.parse(value.windowStart))
             &&typeof value.windowEnd==='string'&&Number.isFinite(Date.parse(value.windowEnd)));
         };
-        const [systemLog,applicationLog]=await Promise.all([readLog('System'),readLog('Application')]);
+        const [network,firewall,systemLog,applicationLog]=await Promise.all([
+          networkPromise,firewallPromise,readLog('System'),readLog('Application')
+        ]);
         let sdp;
         if(mode!=='connected'){
           sdp={status:'disconnected',label:'SDP 미연결',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
