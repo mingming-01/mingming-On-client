@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import {
   copyFileSync,
   existsSync,
@@ -85,6 +86,111 @@ function validatePng256(filePath) {
   }
 }
 
+const pngCrcTable = new Uint32Array(256);
+for (let index = 0; index < pngCrcTable.length; index += 1) {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+  }
+  pngCrcTable[index] = value >>> 0;
+}
+
+function pngCrc32(data) {
+  let value = 0xffffffff;
+  for (const byte of data) {
+    value = pngCrcTable[(value ^ byte) & 0xff] ^ (value >>> 8);
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBytes = Buffer.from(type, 'ascii');
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(pngCrc32(Buffer.concat([typeBytes, data])), 0);
+  return Buffer.concat([length, typeBytes, data, crc]);
+}
+
+function pointInPolygon(x, y, points) {
+  let inside = false;
+  for (let current = 0, previous = points.length - 1; current < points.length; previous = current, current += 1) {
+    const x1 = points[current][0];
+    const y1 = points[current][1];
+    const x2 = points[previous][0];
+    const y2 = points[previous][1];
+    if ((y1 > y) !== (y2 > y) && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function generateDefaultIcon(outputPath) {
+  const width = 256;
+  const height = 256;
+  const rowSize = width * 4 + 1;
+  const pixels = Buffer.alloc(rowSize * height);
+  const shield = [[128, 42], [190, 67], [186, 125], [168, 160], [128, 197], [88, 160], [70, 125], [66, 67]];
+  const check = [[91, 122], [103, 110], [124, 131], [153, 101], [166, 114], [124, 156]];
+  for (let y = 0; y < height; y += 1) {
+    const row = y * rowSize;
+    pixels[row] = 0;
+    for (let x = 0; x < width; x += 1) {
+      const px = x + 0.5;
+      const py = y + 0.5;
+      const nearestX = Math.max(52, Math.min(204, px));
+      const nearestY = Math.max(52, Math.min(204, py));
+      const inRoundedSquare = px >= 8 && px <= 248 && py >= 8 && py <= 248
+        && ((px - nearestX) ** 2 + (py - nearestY) ** 2 <= 44 ** 2);
+      let red = 0;
+      let green = 0;
+      let blue = 0;
+      let alpha = 0;
+      if (inRoundedSquare) {
+        red = 16;
+        green = 31;
+        blue = 54;
+        alpha = 255;
+      }
+      if (pointInPolygon(px, py, shield)) {
+        red = 39;
+        green = 190;
+        blue = 204;
+        alpha = 255;
+      }
+      if (pointInPolygon(px, py, check)) {
+        red = 245;
+        green = 252;
+        blue = 255;
+        alpha = 255;
+      }
+      const offset = row + 1 + x * 4;
+      pixels[offset] = red;
+      pixels[offset + 1] = green;
+      pixels[offset + 2] = blue;
+      pixels[offset + 3] = alpha;
+    }
+  }
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  header[10] = 0;
+  header[11] = 0;
+  header[12] = 0;
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const image = Buffer.concat([
+    signature,
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(pixels)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  writeFileSync(outputPath, image);
+}
+
 function convertWebpToPng(sourcePath, outputPath) {
   const powershellScript = '$ErrorActionPreference = "Stop"; '
     + 'Add-Type -AssemblyName System.Drawing; '
@@ -103,16 +209,20 @@ function convertWebpToPng(sourcePath, outputPath) {
     + '$source.Dispose(); }';
   try {
     run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', powershellScript]);
+    validatePng256(outputPath);
+    return 'converted-from-repository-webp';
   } catch (powerShellError) {
     try {
       if (existsSync(outputPath)) unlinkSync(outputPath);
       run('magick', [sourcePath, '-resize', '256x256!', 'PNG32:' + outputPath]);
+      validatePng256(outputPath);
+      return 'converted-from-repository-webp';
     } catch (imageMagickError) {
-      throw new Error('기존 WEBP 아이콘을 PNG로 변환하지 못했습니다. Windows 이미지 변환 기능 또는 ImageMagick을 확인하거나 --iconPath로 256x256 PNG를 지정하세요. PowerShell: '
-        + powerShellError.message + '; ImageMagick: ' + imageMagickError.message);
+      generateDefaultIcon(outputPath);
+      validatePng256(outputPath);
+      return 'generated-default-shield';
     }
   }
-  validatePng256(outputPath);
 }
 
 const options = parseOptions(process.argv.slice(2));
@@ -211,20 +321,17 @@ if (existsSync(packageRoot) || existsSync(zipPath)) {
 
 const iconRelative = 'public/assets/alekov/alekov-app-icon.png';
 let iconSourcePath;
+let iconSourceKind;
 let temporaryIconPath = null;
 if (options.iconPath) {
   iconSourcePath = path.resolve(process.cwd(), options.iconPath);
   validatePng256(iconSourcePath);
+  iconSourceKind = 'operator-provided-256x256-png';
 } else {
   const sourceWebp = path.join(sourceRoot, 'public', 'assets', 'alekov', 'alekov-app-icon.webp');
   temporaryIconPath = path.join(os.tmpdir(), 'mingming-app-icon-' + process.pid + '-' + Date.now() + '.png');
-  try {
-    convertWebpToPng(sourceWebp, temporaryIconPath);
-    iconSourcePath = temporaryIconPath;
-  } catch (error) {
-    if (existsSync(temporaryIconPath)) unlinkSync(temporaryIconPath);
-    throw error;
-  }
+  iconSourceKind = convertWebpToPng(sourceWebp, temporaryIconPath);
+  iconSourcePath = temporaryIconPath;
 }
 
 mkdirSync(outputParent, { recursive: true });
@@ -327,7 +434,7 @@ const manifest = {
     format: 'PNG',
     width: 256,
     height: 256,
-    source: options.iconPath ? 'operator-provided-256x256-png' : 'converted-from-repository-webp',
+    source: iconSourceKind,
   },
   start: {
     script: null,
