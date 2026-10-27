@@ -1296,7 +1296,7 @@ function validNetworkStatusData(data) {
   if (data.firewall.status === 'ok'
     && (!Array.isArray(data.firewall.profiles) || data.firewall.profiles.length > 10
       || !data.firewall.profiles.every((item) => isRecord(item)
-        && typeof item.name === 'string' && typeof item.enabled === 'boolean'
+        && typeof item.name === 'string' && typeof item.enabled === 'string'
         && typeof item.defaultInboundAction === 'string' && typeof item.defaultOutboundAction === 'string'))) return false;
 
   for (const item of [data.systemLog, data.applicationLog]) {
