@@ -78,7 +78,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1
 | `npm start` | 기본 서버 실행 | 기본 실행은 실제 기존 회사 시스템에 연결된 상태가 아닙니다. |
 | `npm run demo` | 예제 자료로 화면 실행 | 예제 데이터이며 실제 시스템 연결이나 단계 통과를 뜻하지 않습니다. |
 | `npm run check` | 학생 화면과 포장 도구의 JavaScript 문법 검사 | 실제 서버 연결·화면 통합·과제 채점은 검사하지 않습니다. |
-| `npm run package-app` | 새 패키지 폴더, ZIP, APP_PACKAGE_MANIFEST.json, 바탕화면 바로가기 생성 | 작업 트리가 깨끗해야 하며 Windows PowerShell을 사용합니다. 인증·설정 파일은 포함하지 않습니다. |
+| `npm run package-app` | 새 패키지 폴더, ZIP, APP_PACKAGE_MANIFEST.json, 256x256 PNG 아이콘 생성 | 작업 트리가 깨끗해야 합니다. 승인된 운영 호스트 실행 환경은 별도 확인이 필요하며, 자동 바탕화면 바로가기는 만들지 않습니다. |
+
+### 3.6 패키지 만들기 (Git Bash)
+
+Git Bash를 앱 폴더 on-client에서 열고 실행합니다. 출력 경로는 예시이므로 실제로 사용할 경로로 바꾸고, 해당 폴더와 같은 이름의 ZIP이 아직 없어야 합니다.
+
+    npm run check
+    npm run package-app -- --source . --out "C:\실제\출력\밍밍-패키지"
+
+- --source에는 on-client 폴더를 지정합니다. 현재 폴더에서 실행할 때는 .을 사용합니다.
+- --out은 생성할 패키지 폴더의 경로입니다. 부모 폴더는 자동으로 만들지만, 대상 폴더 또는 같은 이름의 ZIP이 이미 있으면 덮어쓰지 않고 중단합니다. 저장소 안에는 출력할 수 없습니다.
+- --iconPath는 선택 사항입니다. 생략하면 저장소의 기존 public/assets/alekov/alekov-app-icon.webp를 256x256 PNG로 변환해 패키지에 넣습니다. 변환을 사용할 수 없는 PC에서는 --iconPath와 함께 별도 256x256 PNG를 지정해야 합니다.
+- 생성 결과에는 INSTALL.md와 APP_PACKAGE_MANIFEST.json이 포함됩니다. 매니페스트는 파일 해시와 소스 커밋을 기록합니다.
+- 이 저장소에서는 승인된 운영 호스트 런타임·바로가기 등록 규격·운영 앱 승인 키의 검증 방식을 확인하지 못했습니다. 따라서 패키지 도구는 승인된 바탕화면 바로가기를 생성하지 않으며, INSTALL.md와 매니페스트에 운영자 준비 필요를 기록합니다.
+- PROVIDED_RUNTIME_NOT_INSTALLED 상태이거나 운영 앱 승인 키가 없거나 검증되지 않았다면 실행을 멈추고 담당 운영자에게 준비를 요청합니다. 승인 절차를 우회하거나 --app-only-v1 옵션으로 대체하지 않습니다.
+
 
 시작 도구에서 기본 포트를 쓸 수 없다는 메시지가 나오면 다른 프로그램을 종료하지 말고, 앱 폴더에서 다음처럼 포트를 바꿔 실행합니다.
 
