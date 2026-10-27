@@ -244,10 +244,10 @@ function localFailure(code, message, meta = { mode: 'disconnected', checkedAt: n
 const UNKNOWN_META = { mode: 'unknown', checkedAt: null };
 
 // 모든 요청은 10초 뒤 중단된다. signal로 호출자가 취소할 수 있으며, 응답이 없어도 화면이 잠기지 않는다.
-async function request(path, { method = 'GET', body, signal } = {}) {
+async function request(path, { method = 'GET', body, signal, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const onAbort = () => controller.abort();
   if (signal) {
     if (signal.aborted) controller.abort();
@@ -1296,7 +1296,7 @@ function validNetworkStatusData(data) {
   if (data.firewall.status === 'ok'
     && (!Array.isArray(data.firewall.profiles) || data.firewall.profiles.length > 10
       || !data.firewall.profiles.every((item) => isRecord(item)
-        && typeof item.name === 'string' && typeof item.enabled === 'string'
+        && typeof item.name === 'string' && (typeof item.enabled === 'boolean' || item.enabled === null)
         && typeof item.defaultInboundAction === 'string' && typeof item.defaultOutboundAction === 'string'))) return false;
 
   for (const item of [data.systemLog, data.applicationLog]) {
@@ -1324,7 +1324,7 @@ async function loadNetworkStatus() {
   renderStudent('networkStatus');
 
   try {
-    const result = await request('/api/network-status');
+    const result = await request('/api/network-status', { timeoutMs: 14000 });
     if (currentGeneration !== networkStatusGeneration) return;
     if (result.ok && validNetworkStatusData(result.data)) {
       const data = structuredClone(result.data);
