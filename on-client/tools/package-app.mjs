@@ -52,6 +52,7 @@ const approvedDocs = new Set([
   'docs/SDP_HOST_CONNECTION.md',
   'docs/LOCAL_SYSTEM_STATUS.md',
   'docs/NETWORK_STATUS.md',
+  'docs/QUICK_START.md',
 ]);
 
 function isSafePackageFile(file) {
@@ -83,6 +84,7 @@ const requiredFiles = [
   'student/engine-adapter.mjs',
   'tools/start-alekov.ps1',
   'tools/launch-mingming.ps1',
+  'docs/QUICK_START.md',
 ];
 for (const relative of requiredFiles) {
   if (!files.includes(prefix + relative)) {
@@ -129,6 +131,7 @@ const installGuide = [
   '',
   '- Windows와 Node.js 22~24가 필요합니다. 수업 기준은 Node.js 24.19.0입니다.',
   '- 외부 npm 의존성은 없으므로 npm install을 실행할 필요가 없습니다.',
+  '- 이 패키지에서 시작하기 전에 docs/QUICK_START.md를 읽으세요. 이 안내는 기본 실행, SDP 연결 없음 상태, 오류 해결 순서를 설명합니다.',
   '',
   '## 실행',
   '',
@@ -136,11 +139,13 @@ const installGuide = [
   '',
   'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\launch-mingming.ps1',
   '',
+  '기본 실행은 로컬 서버가 시작된 상태만 확인합니다. 실제 SDP 연결을 확인했다는 뜻이 아니며, 연결 없음이 표시될 수 있습니다.',
+  '',
   '브라우저에서 http://127.0.0.1:5189/ 을 엽니다. 종료하려면 PowerShell 창에서 Ctrl+C를 누릅니다.',
   '',
   '## 실제 SDP 연결',
   '',
-  '기본 실행은 연결 없음 상태일 수 있습니다. 실제 연결이 필요하면 담당 운영자가 발급한 설정 파일 경로가 있어야 합니다.',
+  '로그인 정보·업무 앱·보안 기록·기기·세션의 실제 조회에는 담당 운영자가 발급한 SDP 설정 파일 경로가 필요합니다. 설정이 없으면 연결 없음으로 표시되는 것이 정상입니다.',
   '',
   'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\launch-mingming.ps1 -SdpHostConfig "C:\\실제로_발급받은_경로\\sdp-host.json"',
   '',
