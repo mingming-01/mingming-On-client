@@ -524,7 +524,7 @@ export function createStudentView() {
         if (kind === 'firewall') {
           if (item.status !== 'ok') return '확인 불가';
           return Array.isArray(item.profiles) && item.profiles.length
-            ? item.profiles.map((row) => row.name + ': ' + (row.enabled === 'True' ? '사용' : row.enabled === 'False' ? '사용 안 함' : '상태 확인 불가 (' + row.enabled + ')')).join(', ')
+            ? item.profiles.map((row) => row.name + ': ' + (row.enabled === true || row.enabled === 'True' ? '사용' : row.enabled === false || row.enabled === 'False' ? '사용 안 함' : '상태 확인 불가')).join(', ')
             : '조회 성공 · 반환된 프로필이 없습니다.';
         }
         if (kind === 'systemLog' || kind === 'applicationLog') {
@@ -580,7 +580,7 @@ export function createStudentView() {
         if (data.firewall?.status === 'ok') {
           if (!data.firewall.profiles.length) addText(firewall, 'p', '프로필 정보가 반환되지 않았습니다.');
           for (const profile of data.firewall.profiles) {
-            addText(firewall, 'p', profile.name + ' · 방화벽: ' + (profile.enabled === 'True' ? '사용(Enabled)' : profile.enabled === 'False' ? '사용 안 함(Disabled)' : '확인 불가 (' + profile.enabled + ')')
+            addText(firewall, 'p', profile.name + ' · 방화벽: ' + (profile.enabled === true || profile.enabled === 'True' ? '사용(Enabled)' : profile.enabled === false || profile.enabled === 'False' ? '사용 안 함(Disabled)' : '확인 불가')
               + ' · 인바운드 기본 동작: ' + profile.defaultInboundAction
               + ' · 아웃바운드 기본 동작: ' + profile.defaultOutboundAction);
           }
