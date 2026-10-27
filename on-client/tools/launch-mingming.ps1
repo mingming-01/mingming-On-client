@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
   [ValidateRange(1024, 65535)][int]$Port = 5189,
+  [switch]$Demo,
   [string]$SdpHostConfig,
   [string]$NativeHostConfig,
   [ValidateRange(1, 120)][int]$WaitSeconds = 30
@@ -8,6 +9,12 @@ param(
 
 Set-StrictMode -Version 3
 $ErrorActionPreference = 'Stop'
+
+if ($Demo -and ($PSBoundParameters.ContainsKey('SdpHostConfig') -or $PSBoundParameters.ContainsKey('NativeHostConfig'))) {
+  Write-Host '시연 모드에는 실제 연결 설정을 함께 사용할 수 없습니다. 설정 없이 예제 모드로 실행하세요.' -ForegroundColor Yellow
+  Read-Host 'Enter를 눌러 닫으세요'
+  exit 2
+}
 
 $starter = Join-Path $PSScriptRoot 'start-alekov.ps1'
 if (-not (Test-Path -LiteralPath $starter -PathType Leaf)) {
@@ -18,6 +25,7 @@ if (-not (Test-Path -LiteralPath $starter -PathType Leaf)) {
 
 # 서버는 별도 PowerShell 창에서 실행하므로 사용자가 그 창에서 Ctrl+C로 종료할 수 있다.
 $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $starter + '" -Port ' + $Port
+if ($Demo) { $arguments += ' -Demo' }
 if (-not [string]::IsNullOrWhiteSpace($SdpHostConfig)) {
   $arguments += ' -SdpHostConfig "' + $SdpHostConfig + '"'
 }
@@ -52,6 +60,7 @@ if (-not $ready) {
 }
 
 Start-Process $url
+if ($Demo) { Write-Host '시연 모드입니다. 화면의 기록과 판정은 설명용 예제이며 실제 운영 데이터가 아닙니다.' -ForegroundColor Cyan }
 Write-Host '브라우저를 열었습니다. 앱 서버는 별도 PowerShell 창에서 실행 중입니다.'
 Write-Host '앱을 종료하려면 앱 서버 PowerShell 창에서 Ctrl+C를 누르세요.'
 exit 0
