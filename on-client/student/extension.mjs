@@ -482,7 +482,7 @@ export function createStudentView() {
           const csvCell = (value) => {
             let text = value == null ? '' : String(value);
             // Excel 등의 스프레드시트가 입력을 수식으로 실행하지 않도록 위험한 셀을 문자로 취급한다.
-            if (/^[\\s]*[=+\\-@]/.test(text)) text = "'" + text;
+            if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text;
             return '"' + text.replace(/"/g, '""') + '"';
           };
 
@@ -513,8 +513,8 @@ export function createStudentView() {
                 (event.evidence || []).map((row) => [row?.id, row?.text].filter(isText).join(': ')).join(' | '),
                 (event.rules || []).map((row) => [row?.id, row?.text].filter(isText).join(': ')).join(' | '),
               ]);
-              const csv = '\\uFEFF' + [header, ...dataRows]
-                .map((row) => row.map(csvCell).join(',')).join('\\r\\n');
+              const csv = '\uFEFF' + [header, ...dataRows]
+                .map((row) => row.map(csvCell).join(',')).join('\r\n');
               const file = new Blob([csv], { type: 'text/csv;charset=utf-8' });
               const url = URL.createObjectURL(file);
               const link = document.createElement('a');
