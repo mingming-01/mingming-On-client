@@ -529,7 +529,8 @@ if (checkedManifest.hostExecution.status !== 'operator-preparation-required'
 if (!checkedInstall.includes('PROVIDED_RUNTIME_NOT_INSTALLED')
     || !checkedInstall.includes('--app-only-v1')
     || !checkedInstall.includes('운영자 준비가 필요')
-    || !checkedInstall.includes('-Demo 예제 모드')) {
+    || !checkedInstall.includes('-Demo 예제 모드')
+    || !checkedInstall.includes('ZIP 안에는 포함되지 않습니다')) {
   throw new Error('패키지 검증 실패: INSTALL.md의 시연/운영 준비 안내가 누락되었습니다.');
 }
 
