@@ -45,7 +45,7 @@ engine.mjs, server.mjs, student/engine-adapter.mjs와 launcher에 명시적인 `
 
 ## 실제 연결 계약
 
-HTTPS POST 경로는 /alekov/context, /alekov/apps, /alekov/decision 세 개뿐입니다. appId/audience는 aleph-on/on-client로 고정합니다. 요청은 개인 mTLS와 JWT Bearer 인증을 함께 사용하고, rejectUnauthorized=true와 agent=false를 사용합니다. redirect를 따라가지 않습니다. 요청 본문은 최대 4096바이트, 성공 응답은 최대 64 KiB입니다. 200 성공 상태·application/json·중복 중요 헤더·엄격 JSON·x-sdp-request-id를 확인합니다. 오류 응답의 원문·경로·인증서·토큰은 공개 오류로 전달하지 않습니다.
+기본 SDP 조회·판정 경로는 /alekov/context, /alekov/apps, /alekov/decision, /alekov/events, /alekov/devices, /alekov/sessions입니다. AI binding 및 action 경로는 서버가 소유한 별도 흐름이며 일반 학생 렌더러에 임의 권한으로 노출하지 않습니다. appId/audience는 aleph-on/on-client로 고정합니다. 요청은 개인 mTLS와 JWT Bearer 인증을 함께 사용하고, rejectUnauthorized=true와 agent=false를 사용합니다. redirect를 따라가지 않습니다. 요청 본문은 최대 4096바이트, 성공 응답은 최대 64 KiB입니다. 200 성공 상태·application/json·중복 중요 헤더·엄격 JSON·x-sdp-request-id를 확인합니다. 오류 응답의 원문·경로·인증서·토큰은 공개 오류로 전달하지 않습니다.
 
 각 operation은 context와 후속 호출을 합쳐 최대 5초입니다. wall/monotonic 기한을 모두 검사하고, 전달받은 실제 AbortSignal과 close()가 진행 중 HTTPS request/response를 종료합니다. 타이머와 외부 abort listener는 정리합니다. 인증 또는 원천 검증 실패를 접근 deny나 빈 성공으로 바꾸지 않습니다.
 
@@ -53,7 +53,7 @@ HTTPS POST 경로는 /alekov/context, /alekov/apps, /alekov/decision 세 개뿐�
 - readApps(scope, {signal}): scope는 정확히 subjectId/projectId/appId/audience입니다. 현재 context로 subject와 고정 project를 확인한 뒤 같은 자격 snapshot의 sessionId로 apps를 조회합니다. 전후 subject/project/class/device/session/policy revision/registry digest/catalog digest가 같아야 합니다. 최대 100개 앱의 정확한 id/name/subjectId/projectId와 id 중복 여부를 검증합니다. 앱 목록 자체는 접근 allow 판정이 아닙니다.
 - decideAccess({appId, requestId}, scope, {signal}): 현재 context를 조회한 뒤 선택 앱과 원 requestId를 relay에 전달합니다. header·outer·decision의 engineRequestId와 원 clientRequestId, 앱·subject·project·session을 결속합니다. 실제 allow/deny/challenge만 허용합니다. reason과 ruleIds는 안전한 짧은 코드로 검증하고, reason은 “접근 판정: 원코드”로 표시합니다. 원문 정책 설명을 추측하지 않습니다.
 
-readEvents/readDevices/readSessions/AI/action 메서드는 제공하지 않습니다. 미구현 메서드를 가짜 빈 목록이나 성공 결과로 대신하지 않습니다.
+readEvents/readDevices/readSessions는 현재 본인 범위와 프로젝트 ID를 다시 대조한 뒤 각각 최근 기록(최대 40건), 등록 기기(최대 100건), 현재 검증된 세션 1개를 조회합니다. 기록의 session/device 상태와 기기 보안 준수 상태는 현재 계약에서 unknown으로 반환될 수 있으며, 이를 정상으로 추정하지 않습니다. 미구현 항목은 가짜 빈 목록이나 성공 결과로 대신하지 않습니다. AI binding과 action 메서드는 서버가 소유하며 학생 adapter의 일반 조회 capability로 전달하지 않습니다.
 
 context는 고정 schema/kind, 프로젝트 subject 64hex, deviceId 16hex, 0 이상의 safe-integer policyRevision, registry/catalog digest 64hex를 요구합니다. classId·sessionId·앱·reason/rule 식별자는 영숫자로 시작하는 ASCII 영숫자·점·밑줄·콜론·하이픈 1~80자로 제한합니다. sessionId의 특정 접두사를 가정하지 않습니다. UUID는 소문자 RFC 형태로 검증합니다. 실제 공급자와 이 제한의 일치는 root가 후속 확인해야 합니다.
 

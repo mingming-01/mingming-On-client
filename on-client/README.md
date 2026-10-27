@@ -10,13 +10,17 @@
 
     powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1
 
-npm start도 같은 서버를 켭니다. 기본 실행은 실제 회사 시스템(기존 엔진)에 연결되지 않은 상태입니다. npm run demo는 예제 자료로 화면을 보여 줄 뿐이며 실제 연결이나 성취가 아닙니다. npm run check는 student/extension.mjs의 문법만 확인합니다.
+npm start도 같은 서버를 켭니다. 기본 실행은 실제 회사 시스템(기존 엔진)에 연결되지 않은 상태입니다. 실제 연결은 운영자가 발급한 설정 파일 경로를 -SdpHostConfig에 지정해야 합니다. npm run demo는 예제 자료로 화면을 보여 줄 뿐이며 실제 연결이나 성취가 아닙니다. npm run check는 학생 화면과 포장 도구의 문법을 검사하고, npm run package-app은 인증 자료를 제외한 별도 패키지·압축 파일·매니페스트·바탕화면 바로가기를 생성합니다.
 
 ## 지킬 것
 
 - 기존 1~3차 프로젝트와 학생 파일은 지우거나 덮어쓰지 않습니다. 새 폴더에서 시작하거나, 이미 하던 프로젝트를 이어 씁니다.
 - AI 열쇠·비밀번호·토큰을 코드, 커밋, 캡처, 도움정보에 넣지 않습니다. 주소나 열쇠를 직접 입력하는 칸도 만들지 않습니다.
 - .env.example에는 비밀 없는 설정만 있습니다.
+
+## 앱 포장
+
+앱 폴더에서 npm run package-app을 실행합니다. 패키지는 기존 프로젝트·제출물을 덮어쓰지 않고 %LOCALAPPDATA%\ALEPH\Packages 아래에 새 폴더와 ZIP으로 생성합니다. APP_PACKAGE_MANIFEST.json에는 원본 커밋과 포함 파일의 SHA-256이 기록됩니다. 바탕화면 바로가기는 기본 실행 모드로 앱을 켭니다. 별도 SDP 설정을 발급받은 경우에만 설명서의 -SdpHostConfig 옵션으로 실제 연결을 지정합니다.
 
 ## 더 읽을 곳
 
