@@ -36,7 +36,7 @@ const files=new Map([['/','public/index.html'],['/index.html','public/index.html
   ...['alekov-ai-explain','alekov-app-icon','alekov-connect-approval','alekov-connection-unknown','alekov-empty-records'].map(name=>[`/assets/alekov/${name}.webp`,`public/assets/alekov/${name}.webp`])]);
 const connectionRoutes=new Map(['start','finish','status','cancel'].map(kind=>[`/api/ai/connect/${kind}`,kind]));
 const safeErrors=Object.freeze({
-  ENGINE_NOT_CONNECTED:[503,'기존 서버·에이전트에 연결되지 않았습니다. 기본 실행은 연결 없음 상태입니다. 실제 SDP 연결에는 담당 운영자가 발급한 설정 파일 경로를 지정해야 합니다. 설정이 없다면 담당 운영자에게 요청하세요.'],
+  ENGINE_NOT_CONNECTED:[503,'기존 서버·에이전트 연결을 확인할 수 없습니다. 기본 실행은 연결 없음 상태입니다. SDP 연결을 사용하려면 담당 운영자가 발급한 SDP 설정 파일 경로를 지정하세요. 다른 연결 어댑터를 사용하는 경우 담당자가 제공한 어댑터 설정을 확인하세요. 설정이 없다면 담당 운영자에게 요청하세요.'],
   ENGINE_ADAPTER_INVALID:[503,'기존 서버 연결 어댑터의 형식을 확인하세요.'],
   ENGINE_RESULT_UNVERIFIED:[503,'서버 응답을 확인할 수 없습니다. 정상으로 판단하지 말고 연결 계약을 확인하세요.'],
   ENGINE_TIMEOUT:[503,'기존 서버의 응답 시간이 초과됐습니다. 다시 확인하세요.'],
