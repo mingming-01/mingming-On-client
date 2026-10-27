@@ -39,6 +39,12 @@ export function createStudentView() {
       '.student-core-link:hover { background: var(--surface); }',
       '.student-core-link:focus-visible, .student-refresh-button:focus-visible, #identity-title:focus-visible, #student-decision-title:focus-visible, #student-events-title:focus-visible { outline: 3px solid #f5b400; outline-offset: 3px; box-shadow: none; }',
       '.student-refresh-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; }',
+      '.student-events-toolbar { display: grid; gap: 10px; margin: 12px 0; }',
+      '.student-events-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }',
+      '.student-events-search { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }',
+      '.student-events-search input { flex: 1; min-width: 220px; min-height: 40px; }',
+      '.student-events-actions { display: flex; gap: 8px; flex-wrap: wrap; }',
+      '.student-events-status { min-height: 1.4em; }',
       '.student-refresh-button { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; font-weight: 600; }',
       '.student-refresh-feedback { font-size: .9rem; color: var(--muted); }',
       '.student-loading-spinner { width: 14px; height: 14px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: student-refresh-spin .8s linear infinite; }',
@@ -397,21 +403,146 @@ export function createStudentView() {
         } else {
           // 원본 배열을 바꾸지 않도록 복사한 뒤 정렬한다.
           const sorted = [...data].sort(newestFirst);
-          const filters = { kind: 'all', appId: 'all', access: 'all' };
+          const filters = { kind: 'all', appId: 'all', access: 'all', query: '' };
           let selectedId = null;
 
           addText(root, 'p', '이 목록은 본인의 최근 기록(최대 40건)입니다. 모든 직원의 전체 이력이나 실시간 전체 위협 탐지가 아닙니다. XDR 경보는 서버가 이미 저장한 경보만 표시합니다.');
 
+          const toolbar = document.createElement('div');
+          toolbar.className = 'student-events-toolbar';
+          const searchRow = document.createElement('div');
+          searchRow.className = 'student-events-search';
+          const searchLabel = addText(searchRow, 'label', '기록 검색');
+          searchLabel.setAttribute('for', 'student-events-search');
+          const searchInput = document.createElement('input');
+          searchInput.id = 'student-events-search';
+          searchInput.type = 'search';
+          searchInput.autocomplete = 'off';
+          searchInput.placeholder = '사건 ID, 요약, 앱, 근거, 규칙 검색';
+          searchInput.setAttribute('aria-label', '보안 기록 검색어');
+          searchInput.addEventListener('input', () => {
+            filters.query = searchInput.value.trim().toLocaleLowerCase();
+            refresh();
+          });
+          searchRow.append(searchInput);
+
           const filterBar = document.createElement('div');
           filterBar.className = 'row';
+          const actionRow = document.createElement('div');
+          actionRow.className = 'student-events-actions';
+          const resetButton = addText(actionRow, 'button', '필터 초기화');
+          resetButton.type = 'button';
+          resetButton.className = 'btn';
+          const exportButton = addText(actionRow, 'button', '현재 결과 CSV 저장');
+          exportButton.type = 'button';
+          exportButton.className = 'btn';
+          const actionStatus = addText(actionRow, 'p', '', 'student-events-status muted');
+          actionStatus.setAttribute('role', 'status');
+          actionStatus.setAttribute('aria-live', 'polite');
+
+          const summaryArea = document.createElement('div');
+          summaryArea.className = 'student-events-summary';
+          summaryArea.setAttribute('aria-label', '현재 필터 결과 요약');
+
           const listArea = document.createElement('div');
           const detailArea = document.createElement('div');
           detailArea.className = 'card';
           const buttons = new Map();
+          const filterControls = new Map();
+
+          const searchableText = (event) => [
+            event.id, event.summary, event.appId, event.at,
+            ...(Array.isArray(event.evidence) ? event.evidence.flatMap((row) => [row?.id, row?.text]) : []),
+            ...(Array.isArray(event.rules) ? event.rules.flatMap((row) => [row?.id, row?.text]) : []),
+          ].filter(isText).join(' ').toLocaleLowerCase();
 
           const visibleEvents = () => sorted.filter((event) => (filters.kind === 'all' || event.kind === filters.kind)
             && (filters.appId === 'all' || event.appId === filters.appId)
-            && (filters.access === 'all' || event.state?.access === filters.access));
+            && (filters.access === 'all' || event.state?.access === filters.access)
+            && (!filters.query || searchableText(event).includes(filters.query)));
+
+          const updateSummary = (rows) => {
+            summaryArea.replaceChildren();
+            const denied = rows.filter((event) => event.state?.access === 'denied').length;
+            const unknown = rows.filter((event) => event.state?.access === 'unknown').length;
+            const values = [
+              '현재 조건 ' + rows.length + '건',
+              '접속 기록 ' + rows.filter((event) => event.kind === 'access').length + '건',
+              'XDR 경보 기록 ' + rows.filter((event) => event.kind === 'xdr').length + '건',
+              '접속 거부 ' + denied + '건',
+              '접속 확인 불가 ' + unknown + '건',
+            ];
+            for (const value of values) {
+              const tag = addText(summaryArea, 'span', value);
+              tag.className = 'tag';
+            }
+            exportButton.disabled = rows.length === 0;
+          };
+
+          const csvCell = (value) => {
+            let text = value == null ? '' : String(value);
+            // Excel 등의 스프레드시트가 입력을 수식으로 실행하지 않도록 위험한 셀을 문자로 취급한다.
+            if (/^[\\s]*[=+\\-@]/.test(text)) text = "'" + text;
+            return '"' + text.replace(/"/g, '""') + '"';
+          };
+
+          const exportVisibleEvents = () => {
+            const rows = visibleEvents();
+            if (rows.length === 0) {
+              actionStatus.textContent = '저장할 기록이 없습니다. 필터 조건을 바꿔 주세요.';
+              return;
+            }
+            try {
+              if (typeof Blob !== 'function' || typeof URL?.createObjectURL !== 'function') {
+                throw new Error('CSV_DOWNLOAD_UNAVAILABLE');
+              }
+              const header = [
+                '출처 모드', '원본 시각(ISO)', '기록 종류', '사건 ID', '앱 ID', '요약',
+                '접속 상태', '세션 상태', '기기 상태', '근거', '규칙',
+              ];
+              const dataRows = rows.map((event) => [
+                sourceMode || 'unknown',
+                event.at,
+                event.kind,
+                event.id,
+                event.appId,
+                event.summary,
+                event.state?.access,
+                event.state?.session,
+                event.state?.device,
+                (event.evidence || []).map((row) => [row?.id, row?.text].filter(isText).join(': ')).join(' | '),
+                (event.rules || []).map((row) => [row?.id, row?.text].filter(isText).join(': ')).join(' | '),
+              ]);
+              const csv = '\\uFEFF' + [header, ...dataRows]
+                .map((row) => row.map(csvCell).join(',')).join('\\r\\n');
+              const file = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+              const url = URL.createObjectURL(file);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = 'mingming-timeline-' + (sourceMode === 'demo' ? 'demo' : 'records')
+                + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv';
+              link.hidden = true;
+              root.append(link);
+              link.click();
+              link.remove();
+              window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+              actionStatus.textContent = rows.length + '건을 CSV로 내보냈습니다. 현재 필터 결과만 포함됩니다.';
+            } catch {
+              actionStatus.textContent = 'CSV 저장을 시작하지 못했습니다. 브라우저의 다운로드 설정을 확인하세요.';
+            }
+          };
+
+          resetButton.addEventListener('click', () => {
+            for (const [key, select] of filterControls) {
+              filters[key] = 'all';
+              select.value = 'all';
+            }
+            filters.query = '';
+            searchInput.value = '';
+            actionStatus.textContent = '필터를 초기화했습니다.';
+            refresh();
+          });
+          exportButton.addEventListener('click', exportVisibleEvents);
 
           const renderDetail = () => {
             detailArea.replaceChildren();
@@ -458,6 +589,7 @@ export function createStudentView() {
           const refresh = () => {
             const rows = visibleEvents();
             if (selectedId !== null && !rows.some((event) => event.id === selectedId)) selectedId = null;
+            updateSummary(rows);
             buttons.clear();
             listArea.replaceChildren();
             addText(listArea, 'p', `표시 중인 기록 ${rows.length}건 / 받은 기록 ${sorted.length}건`);
@@ -521,6 +653,7 @@ export function createStudentView() {
               filters[key] = select.value;
               refresh();
             });
+            filterControls.set(key, select);
             wrap.append(select);
             filterBar.append(wrap);
           };
@@ -529,7 +662,8 @@ export function createStudentView() {
           addFilter('appId', '업무 앱', unique(sorted.map((event) => event.appId)), (value) => value);
           addFilter('access', '접속 상태', unique(sorted.map((event) => event.state?.access)), (value) => withCode(accessLabels, value));
 
-          root.append(filterBar, listArea, detailArea);
+          toolbar.append(searchRow, filterBar, actionRow);
+          root.append(summaryArea, toolbar, listArea, detailArea);
           refresh();
         }
       } else if (status === 'idle' || status == null) {
