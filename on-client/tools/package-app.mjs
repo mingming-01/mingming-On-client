@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  unlinkSync,
   readdirSync,
   statSync,
   writeFileSync,
@@ -32,8 +33,102 @@ function quotePowerShell(value) {
   return "'" + String(value).replace(/'/g, "''") + "'";
 }
 
-const repoRoot = run('git', ['rev-parse', '--show-toplevel']);
-const appRelative = path.relative(repoRoot, appRoot).split(path.sep).join('/');
+function parseOptions(args) {
+  const options = { source: null, out: null, iconPath: null, help: false };
+  for (let index = 0; index < args.length; index += 1) {
+    const name = args[index];
+    if (name === '--help' || name === '-h') {
+      options.help = true;
+      continue;
+    }
+    if (!['--source', '--out', '--iconPath'].includes(name)) {
+      throw new Error('알 수 없는 옵션입니다: ' + name + ' (사용법은 --help)');
+    }
+    const value = args[index + 1];
+    if (!value || value.startsWith('--')) {
+      throw new Error(name + ' 뒤에 경로를 지정해야 합니다.');
+    }
+    options[name === '--source' ? 'source' : name === '--out' ? 'out' : 'iconPath'] = value;
+    index += 1;
+  }
+  return options;
+}
+
+function samePath(left, right) {
+  const first = path.resolve(left);
+  const second = path.resolve(right);
+  return process.platform === 'win32'
+    ? first.toLowerCase() === second.toLowerCase()
+    : first === second;
+}
+
+function isInside(parent, target) {
+  const relative = path.relative(parent, target);
+  return relative === ''
+    || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
+}
+
+function validatePng256(filePath) {
+  if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+    throw new Error('아이콘 파일이 없습니다: ' + filePath);
+  }
+  const data = readFileSync(filePath);
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (data.length < 24 || !data.subarray(0, 8).equals(signature)
+      || data.toString('ascii', 12, 16) !== 'IHDR') {
+    throw new Error('아이콘은 PNG 형식이어야 합니다: ' + filePath);
+  }
+  const width = data.readUInt32BE(16);
+  const height = data.readUInt32BE(20);
+  if (width !== 256 || height !== 256) {
+    throw new Error('아이콘은 256x256 PNG여야 합니다. 현재 크기: ' + width + 'x' + height);
+  }
+}
+
+function convertWebpToPng(sourcePath, outputPath) {
+  const powershellScript = '$ErrorActionPreference = "Stop"; '
+    + 'Add-Type -AssemblyName System.Drawing; '
+    + '$source = [System.Drawing.Image]::FromFile(' + quotePowerShell(sourcePath) + '); '
+    + '$bitmap = $null; $graphics = $null; '
+    + 'try { '
+    + '$bitmap = [System.Drawing.Bitmap]::new(256, 256); '
+    + '$graphics = [System.Drawing.Graphics]::FromImage($bitmap); '
+    + '$graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; '
+    + '$graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality; '
+    + '$graphics.DrawImage($source, 0, 0, 256, 256); '
+    + '$bitmap.Save(' + quotePowerShell(outputPath) + ', [System.Drawing.Imaging.ImageFormat]::Png); '
+    + '} finally { '
+    + 'if ($null -ne $graphics) { $graphics.Dispose() }; '
+    + 'if ($null -ne $bitmap) { $bitmap.Dispose() }; '
+    + '$source.Dispose(); }';
+  try {
+    run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', powershellScript]);
+  } catch (powerShellError) {
+    try {
+      if (existsSync(outputPath)) unlinkSync(outputPath);
+      run('magick', [sourcePath, '-resize', '256x256!', 'PNG32:' + outputPath]);
+    } catch (imageMagickError) {
+      throw new Error('기존 WEBP 아이콘을 PNG로 변환하지 못했습니다. Windows 이미지 변환 기능 또는 ImageMagick을 확인하거나 --iconPath로 256x256 PNG를 지정하세요. PowerShell: '
+        + powerShellError.message + '; ImageMagick: ' + imageMagickError.message);
+    }
+  }
+  validatePng256(outputPath);
+}
+
+const options = parseOptions(process.argv.slice(2));
+if (options.help) {
+  console.log('사용법: npm run package-app -- [--source .] [--out <새 출력 폴더>] [--iconPath <256x256 PNG>]');
+  console.log('--out 생략 시 %LOCALAPPDATA%/ALEPH/Packages 아래에 새 버전 폴더를 만듭니다.');
+  console.log('--iconPath 생략 시 저장소의 기존 WEBP 아이콘을 256x256 PNG로 변환합니다.');
+  process.exit(0);
+}
+
+const sourceRoot = options.source ? path.resolve(process.cwd(), options.source) : appRoot;
+if (!samePath(sourceRoot, appRoot)) {
+  throw new Error('--source는 이 도구가 포함된 on-client 폴더여야 합니다: ' + appRoot);
+}
+const repoRoot = run('git', ['rev-parse', '--show-toplevel'], sourceRoot);
+const appRelative = path.relative(repoRoot, sourceRoot).split(path.sep).join('/');
 const git = (args) => run('git', args, repoRoot);
 const commit = git(['rev-parse', 'HEAD']);
 const branch = git(['branch', '--show-current']) || 'detached';
@@ -93,17 +188,46 @@ for (const relative of requiredFiles) {
 }
 
 const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-const outputParent = path.join(localAppData, 'ALEPH', 'Packages');
-mkdirSync(outputParent, { recursive: true });
-
 const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.(\d{3})Z$/, '-$1Z');
 const shortCommit = commit.slice(0, 7);
-const folderName = 'mingming-app-v' + packageInfo.version + '-' + shortCommit + '-' + timestamp;
-const packageRoot = path.join(outputParent, folderName);
+const defaultFolderName = 'mingming-app-v' + packageInfo.version + '-' + shortCommit + '-' + timestamp;
+const defaultOutputParent = path.join(localAppData, 'ALEPH', 'Packages');
+const packageRoot = options.out
+  ? path.resolve(process.cwd(), options.out)
+  : path.join(defaultOutputParent, defaultFolderName);
+const outputParent = path.dirname(packageRoot);
+const folderName = path.basename(packageRoot);
 const zipPath = path.join(outputParent, folderName + '.zip');
-if (existsSync(packageRoot) || existsSync(zipPath)) {
-  throw new Error('같은 이름의 결과물이 이미 있습니다. 기존 파일은 덮어쓰지 않았습니다. 다시 실행해 새 결과를 만드세요.');
+
+if (!folderName || folderName === path.parse(packageRoot).root) {
+  throw new Error('--out에는 루트 폴더가 아닌 새 패키지 폴더 경로를 지정하세요.');
 }
+if (isInside(repoRoot, packageRoot)) {
+  throw new Error('출력 폴더는 Git 저장소 밖에 있어야 합니다. 저장소 안의 원본 파일이나 제출물을 덮어쓰지 않습니다.');
+}
+if (existsSync(packageRoot) || existsSync(zipPath)) {
+  throw new Error('출력 폴더 또는 ZIP이 이미 있습니다. 기존 결과를 덮어쓰지 않았습니다: ' + packageRoot);
+}
+
+const iconRelative = 'public/assets/alekov/alekov-app-icon.png';
+let iconSourcePath;
+let temporaryIconPath = null;
+if (options.iconPath) {
+  iconSourcePath = path.resolve(process.cwd(), options.iconPath);
+  validatePng256(iconSourcePath);
+} else {
+  const sourceWebp = path.join(sourceRoot, 'public', 'assets', 'alekov', 'alekov-app-icon.webp');
+  temporaryIconPath = path.join(os.tmpdir(), 'mingming-app-icon-' + process.pid + '-' + Date.now() + '.png');
+  try {
+    convertWebpToPng(sourceWebp, temporaryIconPath);
+    iconSourcePath = temporaryIconPath;
+  } catch (error) {
+    if (existsSync(temporaryIconPath)) unlinkSync(temporaryIconPath);
+    throw error;
+  }
+}
+
+mkdirSync(outputParent, { recursive: true });
 mkdirSync(packageRoot, { recursive: true });
 
 for (const file of files) {
@@ -117,6 +241,11 @@ for (const file of files) {
   copyFileSync(source, target);
 }
 
+const packagedIconPath = path.join(packageRoot, iconRelative);
+mkdirSync(path.dirname(packagedIconPath), { recursive: true });
+copyFileSync(iconSourcePath, packagedIconPath);
+if (temporaryIconPath && existsSync(temporaryIconPath)) unlinkSync(temporaryIconPath);
+
 // The runtime package does not ship the packaging script itself.
 const distributedPackagePath = path.join(packageRoot, 'package.json');
 const distributedPackage = JSON.parse(readFileSync(distributedPackagePath, 'utf8'));
@@ -125,31 +254,28 @@ distributedPackage.scripts.check = 'node --check src/server.mjs && node --check 
 writeFileSync(distributedPackagePath, JSON.stringify(distributedPackage, null, 2) + '\n', 'utf8');
 
 const installGuide = [
-  '# 밍밍 보안 Agent 설치·실행',
+  '# 밍밍 보안 Agent 패키지 설치 안내',
   '',
-  '## 준비',
+  '## 패키지 확인',
   '',
-  '- Windows와 Node.js 22~24가 필요합니다. 수업 기준은 Node.js 24.19.0입니다.',
+  '- 이 패키지는 Windows용 앱 파일과 실행 안내를 담고 있습니다. Node.js 22~24가 필요하며 수업 기준은 24.19.0입니다.',
   '- 외부 npm 의존성은 없으므로 npm install을 실행할 필요가 없습니다.',
-  '- 이 패키지에서 시작하기 전에 docs/QUICK_START.md를 읽으세요. 이 안내는 기본 실행, SDP 연결 없음 상태, 오류 해결 순서를 설명합니다.',
+  '- 아이콘은 public/assets/alekov/alekov-app-icon.png에 256x256 PNG로 포함됩니다.',
+  '- APP_PACKAGE_MANIFEST.json에는 소스 커밋, 파일 SHA-256, 제외 대상 및 실행 준비 상태가 기록됩니다.',
   '',
-  '## 실행',
+  '## 운영 실행 전 필수 확인',
   '',
-  '이 폴더의 주소 표시줄에 powershell을 입력해 PowerShell을 열고 다음을 실행합니다.',
+  '이 저장소에는 승인된 운영 호스트 런타임의 설치 명령, 등록된 호스트 바로가기 규격 또는 운영 앱 승인 키 검증 규격이 확인되지 않습니다. 이 패키지는 승인된 실행 수단을 대신 만들지 않으며 자동 바탕화면 바로가기도 생성하지 않습니다.',
   '',
-  'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\launch-mingming.ps1',
+  '- 런타임 상태가 PROVIDED_RUNTIME_NOT_INSTALLED이면 실행을 중단하고 운영자 준비가 필요합니다.',
+  '- 운영 앱 승인 키가 없거나 검증되지 않은 경우에도 실행을 중단하고 운영자 준비가 필요합니다.',
+  '- 담당 운영자로부터 승인된 런타임, 바로가기 또는 설치 도구의 정확한 위치와 실행 명령을 받아야 합니다.',
+  '- 승인 절차를 우회하거나 --app-only-v1 옵션으로 대체하지 마세요.',
+  '- SDP 설정, 인증서, 개인키, 토큰 또는 운영 앱 승인 키의 값은 이 패키지, Git 저장소, 채팅 또는 제출물에 넣지 않습니다.',
   '',
-  '기본 실행은 로컬 서버가 시작된 상태만 확인합니다. 실제 SDP 연결을 확인했다는 뜻이 아니며, 연결 없음이 표시될 수 있습니다.',
+  '## 설치 및 실행 명령',
   '',
-  '브라우저에서 http://127.0.0.1:5189/ 을 엽니다. 종료하려면 PowerShell 창에서 Ctrl+C를 누릅니다.',
-  '',
-  '## 실제 SDP 연결',
-  '',
-  '로그인 정보·업무 앱·보안 기록·기기·세션의 실제 조회에는 담당 운영자가 발급한 SDP 설정 파일 경로가 필요합니다. 설정이 없으면 연결 없음으로 표시되는 것이 정상입니다.',
-  '',
-  'powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\launch-mingming.ps1 -SdpHostConfig "C:\\실제로_발급받은_경로\\sdp-host.json"',
-  '',
-  '위 경로는 설명용 자리표시자입니다. 실제로 발급받은 경로로 바꾸세요. 설정 파일 내용, 인증서, 개인키, JWT는 프로젝트 폴더나 압축 파일에 복사하지 않습니다. 설정을 발급받지 못했다면 담당 운영자에게 문의하세요.',
+  '현재 저장소에서 확인된 승인 호스트 설치·실행 명령은 없습니다. 위 운영자 준비가 끝나기 전에는 임의의 PowerShell 바로가기로 운영 앱을 실행하지 마세요. 운영자가 전달한 승인 명령과 설치 안내를 받은 뒤 이 절의 내용을 보완해야 합니다.',
   '',
   '## 데이터 출처',
   '',
@@ -157,7 +283,7 @@ const installGuide = [
   '- connected는 연결 설정이 있다는 뜻일 뿐입니다. 실제 데이터는 각 조회 요청이 정상 응답하고 검증된 경우에만 확인된 것으로 취급합니다.',
   '- unknown, 오류, 미조회는 정상이나 안전하다는 의미가 아닙니다.',
   '',
-].join('\n');
+].join('\\n');
 writeFileSync(path.join(packageRoot, 'INSTALL.md'), installGuide, 'utf8');
 
 function walkFiles(directory, relative = '') {
@@ -196,10 +322,28 @@ const manifest = {
     recommendedNode: '24.19.0',
     externalNpmDependencies: 0,
   },
+  icon: {
+    path: iconRelative,
+    format: 'PNG',
+    width: 256,
+    height: 256,
+    source: options.iconPath ? 'operator-provided-256x256-png' : 'converted-from-repository-webp',
+  },
   start: {
-    script: 'tools/launch-mingming.ps1',
+    script: null,
     defaultUrl: 'http://127.0.0.1:5189/',
     defaultMode: 'disconnected unless a connection is explicitly configured',
+    approvedHostShortcut: 'not-created',
+  },
+  hostExecution: {
+    status: 'operator-preparation-required',
+    approvedRuntime: 'not verified by this repository packaging tool',
+    productionAppApprovalKey: 'not included or verified',
+    blockingConditions: [
+      'PROVIDED_RUNTIME_NOT_INSTALLED',
+      'production app approval key missing or unverified',
+    ],
+    note: 'Do not bypass host approval or substitute --app-only-v1.',
   },
   generated: {
     installGuide: 'INSTALL.md',
@@ -221,45 +365,49 @@ const manifest = {
 
 writeFileSync(path.join(packageRoot, 'APP_PACKAGE_MANIFEST.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
+const manifestPath = path.join(packageRoot, 'APP_PACKAGE_MANIFEST.json');
+const installPath = path.join(packageRoot, 'INSTALL.md');
+const checkedManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+const checkedInstall = readFileSync(installPath, 'utf8');
+const mustExist = [
+  'package.json',
+  'public/index.html',
+  'public/assets/alekov/alekov-app-icon.png',
+  'tools/launch-mingming.ps1',
+  'INSTALL.md',
+  'APP_PACKAGE_MANIFEST.json',
+];
+for (const relative of mustExist) {
+  if (!existsSync(path.join(packageRoot, relative))) {
+    throw new Error('패키지 검증 실패: 필수 결과물이 없습니다: ' + relative);
+  }
+}
+validatePng256(path.join(packageRoot, iconRelative));
+if (checkedManifest.source.commit !== commit || checkedManifest.source.workingTreeClean !== true) {
+  throw new Error('패키지 검증 실패: 소스 커밋 정보가 일치하지 않습니다.');
+}
+if (checkedManifest.hostExecution.status !== 'operator-preparation-required'
+    || checkedManifest.hostExecution.blockingConditions.indexOf('PROVIDED_RUNTIME_NOT_INSTALLED') < 0) {
+  throw new Error('패키지 검증 실패: 운영 실행 준비 상태가 명시되지 않았습니다.');
+}
+if (!checkedInstall.includes('PROVIDED_RUNTIME_NOT_INSTALLED')
+    || !checkedInstall.includes('--app-only-v1')
+    || !checkedInstall.includes('운영자 준비가 필요')) {
+  throw new Error('패키지 검증 실패: INSTALL.md의 운영자 준비 안내가 누락되었습니다.');
+}
+
 const zipCommand = '$ErrorActionPreference = "Stop"; Compress-Archive -LiteralPath '
   + quotePowerShell(packageRoot) + ' -DestinationPath ' + quotePowerShell(zipPath)
   + ' -CompressionLevel Optimal';
 run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', zipCommand]);
-
-const desktopPath = run('powershell.exe', [
-  '-NoProfile',
-  '-ExecutionPolicy',
-  'Bypass',
-  '-Command',
-  "[Environment]::GetFolderPath('Desktop')",
-]);
-if (!desktopPath || !existsSync(desktopPath)) {
-  throw new Error('패키지는 생성했지만 바탕화면 경로를 확인하지 못했습니다: ' + packageRoot);
+if (!existsSync(zipPath) || statSync(zipPath).size === 0) {
+  throw new Error('ZIP 생성 결과를 검증하지 못했습니다: ' + zipPath);
 }
 
-const shortcutPath = path.join(desktopPath, folderName + '.lnk');
-const powershellPath = path.join(
-  process.env.SystemRoot || 'C:\\Windows',
-  'System32',
-  'WindowsPowerShell',
-  'v1.0',
-  'powershell.exe',
-);
-const startScript = path.join(packageRoot, 'tools', 'launch-mingming.ps1');
-const shortcutArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + startScript + '" -Port 5189';
-const shortcutCommand = '$ErrorActionPreference = "Stop"; '
-  + '$shell = New-Object -ComObject WScript.Shell; '
-  + '$shortcut = $shell.CreateShortcut(' + quotePowerShell(shortcutPath) + '); '
-  + '$shortcut.TargetPath = ' + quotePowerShell(powershellPath) + '; '
-  + '$shortcut.Arguments = ' + quotePowerShell(shortcutArgs) + '; '
-  + '$shortcut.WorkingDirectory = ' + quotePowerShell(packageRoot) + '; '
-  + '$shortcut.Description = "밍밍 보안 Agent 실행"; '
-  + '$shortcut.Save()';
-run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', shortcutCommand]);
-
-console.log('밍밍 보안 Agent 패키지 생성 완료');
+console.log('밍밍 보안 Agent 패키지 생성 및 기본 검증 완료');
 console.log('패키지 폴더: ' + packageRoot);
 console.log('ZIP: ' + zipPath);
-console.log('매니페스트: ' + path.join(packageRoot, 'APP_PACKAGE_MANIFEST.json'));
-console.log('바탕화면 바로가기: ' + shortcutPath);
-console.log('주의: 개인 SDP 연결 설정과 인증 자료는 패키지에 포함하지 않았습니다.');
+console.log('매니페스트: ' + manifestPath);
+console.log('아이콘: ' + path.join(packageRoot, iconRelative));
+console.log('운영 실행 승인: 미확인 — 운영자 준비 필요. 승인된 바로가기는 생성하지 않았습니다.');
+console.log('주의: 개인 SDP 연결 설정, 인증 자료 및 운영 앱 승인 키는 패키지에 포함하지 않았습니다.');
