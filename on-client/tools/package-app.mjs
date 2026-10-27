@@ -283,7 +283,7 @@ const installGuide = [
   '- connected는 연결 설정이 있다는 뜻일 뿐입니다. 실제 데이터는 각 조회 요청이 정상 응답하고 검증된 경우에만 확인된 것으로 취급합니다.',
   '- unknown, 오류, 미조회는 정상이나 안전하다는 의미가 아닙니다.',
   '',
-].join('\\n');
+].join('\n');
 writeFileSync(path.join(packageRoot, 'INSTALL.md'), installGuide, 'utf8');
 
 function walkFiles(directory, relative = '') {
