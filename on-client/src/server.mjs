@@ -467,6 +467,10 @@ export function createOnServer(serverOptions={}) {
             return {status:'unknown',label:'확인 불가',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
               reason:'서버 연결 어댑터가 실제 SDP 연결 상태를 확인할 수 있는 모드를 제공하지 않아 미연결로 단정하지 않습니다.'};
           }
+          if(!isOwnedSdpHostEngine(sdpHostEngine)){
+            return {status:'unknown',label:'확인 불가',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
+              reason:'현재 서버에서 검증된 SDP 전용 연결 객체를 확인할 수 없어 다른 원천의 응답을 SDP 연결로 간주하지 않습니다.'};
+          }
           try{
             assertData('identity',await call('readIdentity'));
             assertAlive();
