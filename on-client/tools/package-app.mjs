@@ -229,7 +229,7 @@ const options = parseOptions(process.argv.slice(2));
 if (options.help) {
   console.log('사용법: npm run package-app -- [--source .] [--out <새 출력 폴더>] [--iconPath <256x256 PNG>]');
   console.log('--out 생략 시 %LOCALAPPDATA%/ALEPH/Packages 아래에 새 버전 폴더를 만듭니다.');
-  console.log('--iconPath 생략 시 저장소의 기존 WEBP 아이콘을 256x256 PNG로 변환합니다.');
+  console.log('--iconPath 생략 시 기존 WEBP 변환을 시도하고, 변환할 수 없으면 기본 방패 PNG를 생성합니다.');
   process.exit(0);
 }
 
