@@ -40,3 +40,7 @@ npm run package-app
 ```
 
 기존 패키지나 제출물을 덮어쓰지 않고 새 버전 이름의 패키지를 생성합니다.
+
+## 추가 기능 링크
+
+네트워크 구성·방화벽 프로필·Windows System/Application 경고·오류 집계와 실제 SDP 연결 확인은 `docs/NETWORK_STATUS.md`를 참고하세요. 해당 조회는 기존 CPU·메모리·디스크 실측과 구분됩니다.
