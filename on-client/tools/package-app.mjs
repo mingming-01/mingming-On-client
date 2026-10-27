@@ -332,7 +332,8 @@ const desktopPath = run('powershell.exe', [
 if (!desktopPath || !existsSync(desktopPath)) {
   throw new Error('바탕화면 경로를 확인하지 못해 시연 바로가기를 만들 수 없습니다.');
 }
-const shortcutPath = path.join(desktopPath, folderName + '-시연모드.lnk');
+const shortcutName = '밍밍-시연모드-v' + packageInfo.version + '-' + shortCommit + '-' + timestamp + '.lnk';
+const shortcutPath = path.join(desktopPath, shortcutName);
 if (existsSync(shortcutPath)) {
   throw new Error('같은 이름의 시연 바로가기가 이미 있습니다. 기존 바로가기는 덮어쓰지 않았습니다: ' + shortcutPath);
 }
@@ -390,7 +391,7 @@ const installGuide = [
   '',
   '## 운영 실행 전 필수 확인',
   '',
-  '이 패키지 도구는 바탕화면에 ' + folderName + '-시연모드.lnk 시연 전용 바로가기를 생성합니다. 이 바로가기는 -Demo 예제 모드만 실행하며 승인된 운영 바로가기가 아닙니다.',
+  '이 패키지 도구는 바탕화면에 ' + shortcutName + ' 시연 전용 바로가기를 생성합니다. 이 바로가기는 -Demo 예제 모드만 실행하며 승인된 운영 바로가기가 아닙니다.',
   '이 저장소에서는 승인된 운영 호스트 런타임의 설치 명령, 등록된 호스트 바로가기 규격 또는 운영 앱 승인 키 검증 규격이 확인되지 않았습니다. 운영 실행은 운영자 준비가 필요합니다.',
   '',
   '- 런타임 상태가 PROVIDED_RUNTIME_NOT_INSTALLED이면 실행을 중단하고 운영자 준비가 필요합니다.',
@@ -461,7 +462,7 @@ const manifest = {
     defaultMode: 'desktop shortcut uses demo data; a normal launch is disconnected unless explicitly configured',
     demoShortcut: {
       created: true,
-      name: folderName + '-시연모드.lnk',
+      name: shortcutName,
       mode: 'demo',
       externalToPackageFolder: true,
     },
