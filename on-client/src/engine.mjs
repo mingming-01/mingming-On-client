@@ -2,7 +2,7 @@ import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 
 export const engineError = (code, message, status=503) => Object.assign(new Error(code), {code,safeMessage:message,status});
-const disconnected = () => { throw engineError('ENGINE_NOT_CONNECTED','기존 서버·에이전트에 연결되지 않았습니다. 기본 실행은 연결 없음 상태입니다. 실제 SDP 연결에는 담당 운영자가 발급한 설정 파일 경로를 지정해야 합니다. 설정이 없다면 담당 운영자에게 요청하세요.'); };
+const disconnected = () => { throw engineError('ENGINE_NOT_CONNECTED','기존 서버·에이전트 연결을 확인할 수 없습니다. 기본 실행은 연결 없음 상태입니다. SDP 연결을 사용하려면 담당 운영자가 발급한 SDP 설정 파일 경로를 지정하세요. 다른 연결 어댑터를 사용하는 경우 담당자가 제공한 어댑터 설정을 확인하세요. 설정이 없다면 담당 운영자에게 요청하세요.'); };
 export async function loadEngine(path, {hostCapability} = {}) {
   if (!path) return {evidenceMode:'disconnected'};
   // 이 경로는 서버 실행자의 설정이다. 브라우저 요청에서 모듈을 선택하지 않는다.
