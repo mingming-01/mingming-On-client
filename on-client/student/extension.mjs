@@ -1,6 +1,156 @@
 // 이 파일은 학생이 같은 프로젝트에서 이어서 구현합니다.
 // 제공 UI를 받은 것만으로 단계 완료를 인정하지 않습니다.
 export function createStudentView() {
+
+  const addStudentText = (parent, tag, text, className) => {
+    const node = document.createElement(tag);
+    node.textContent = text;
+    if (className) node.className = className;
+    parent.append(node);
+    return node;
+  };
+
+  const focusArea = (tabId, targetId) => {
+    if (tabId) document.getElementById(tabId)?.click();
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'start', behavior: 'auto' });
+  };
+
+  const installCoreOverview = () => {
+    const view = document.getElementById('view-protection');
+    if (!view) return;
+
+    document.getElementById('student-core-overview')?.remove();
+    document.getElementById('student-core-overview-style')?.remove();
+
+    const style = document.createElement('style');
+    style.id = 'student-core-overview-style';
+    style.textContent = [
+      '.student-core-overview { border-left: 6px solid var(--accent); padding: 20px; }',
+      '.student-core-overview > h2 { font-size: 1.3rem; line-height: 1.4; margin-bottom: 8px; }',
+      '.student-core-overview > p { font-size: 1rem; line-height: 1.55; }',
+      '.student-core-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }',
+      '.student-core-tile { display: flex; flex-direction: column; min-width: 0; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }',
+      '.student-core-tile h3 { font-size: 1.12rem; line-height: 1.45; }',
+      '.student-core-tile p { flex: 1; font-size: 1rem; line-height: 1.5; margin: 0; }',
+      '.student-core-link { min-height: 44px; padding: 9px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-soft); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }',
+      '.student-core-link:hover { background: var(--surface); }',
+      '.student-core-link:focus-visible, .student-refresh-button:focus-visible, #identity-title:focus-visible, #student-decision-title:focus-visible, #student-events-title:focus-visible { outline: 3px solid #f5b400; outline-offset: 3px; box-shadow: none; }',
+      '.student-refresh-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; }',
+      '.student-refresh-button { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; font-weight: 600; }',
+      '.student-refresh-feedback { font-size: .9rem; color: var(--muted); }',
+      '.student-loading-spinner { width: 14px; height: 14px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: student-refresh-spin .8s linear infinite; }',
+      '@keyframes student-refresh-spin { to { transform: rotate(360deg); } }',
+      '.student-local-system > h3, .student-network-status > h3 { font-size: 1.25rem; line-height: 1.45; margin-bottom: 10px; }',
+      '.local-system-primary-value { font-size: 1.2rem; line-height: 1.5; font-weight: 700; overflow-wrap: anywhere; }',
+      '.student-recovery-guide { border-left: 3px solid var(--deny); padding: 8px 12px; margin: 8px 0; background: var(--deny-soft); line-height: 1.55; }',
+      '.student-next-step { line-height: 1.55; }',
+      '@media (max-width: 1120px) { .student-core-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-core-tile:last-child { grid-column: 1 / -1; } }',
+      '@media (prefers-reduced-motion: reduce) { .student-loading-spinner { animation: none; } }'
+    ].join('\n');
+    document.head.append(style);
+
+    const panel = document.createElement('section');
+    panel.id = 'student-core-overview';
+    panel.className = 'card student student-core-overview';
+    panel.setAttribute('aria-labelledby', 'student-core-overview-title');
+    addStudentText(panel, 'h2', '핵심 기능 바로가기').id = 'student-core-overview-title';
+    addStudentText(panel, 'p', '계정 상태, 업무 앱 접근 판정, 보안 기록을 먼저 확인할 수 있습니다. 각 항목은 실제 화면으로 이동하며 설명용 예시 값은 표시하지 않습니다.');
+
+    const grid = document.createElement('div');
+    grid.className = 'student-core-grid';
+    const features = [
+      {
+        title: '계정 · 기기 · 세션',
+        description: '현재 로그인한 계정, 기기 보안 상태와 세션 상태를 확인합니다.',
+        button: '계정 정보 보기',
+        target: 'identity-title',
+        tab: null,
+      },
+      {
+        title: '업무 앱 접근 판정',
+        description: '접근 허용·거부 결과와 정책 판정 이유를 확인합니다.',
+        button: '접근 판정 보기',
+        target: 'student-decision-title',
+        tab: 'tab-apps',
+      },
+      {
+        title: '보안 기록 타임라인',
+        description: '최근 보안 기록을 시각순으로 확인하고 종류별로 거릅니다.',
+        button: '기록 타임라인 보기',
+        target: 'student-events-title',
+        tab: 'tab-records',
+      },
+    ];
+
+    for (const feature of features) {
+      const tile = document.createElement('section');
+      tile.className = 'student-core-tile';
+      addStudentText(tile, 'h3', feature.title);
+      addStudentText(tile, 'p', feature.description);
+      const button = addStudentText(tile, 'button', feature.button, 'student-core-link');
+      button.type = 'button';
+      button.addEventListener('click', () => focusArea(feature.tab, feature.target));
+      grid.append(tile);
+    }
+    panel.append(grid);
+
+    for (const id of ['identity-title', 'student-decision-title', 'student-events-title']) {
+      const heading = document.getElementById(id);
+      if (heading && !heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    }
+    const firstGrid = view.querySelector('.grid-2');
+    if (firstGrid) view.insertBefore(panel, firstGrid);
+    else view.append(panel);
+  };
+
+  const addRefreshControl = (parent, config) => {
+    const row = document.createElement('div');
+    row.className = 'student-refresh-row';
+
+    const isLoading = config.status === 'loading';
+    const button = addStudentText(
+      row,
+      'button',
+      isLoading ? config.loadingLabel : config.label,
+      'btn student-refresh-button'
+    );
+    button.type = 'button';
+    button.disabled = isLoading;
+    button.setAttribute('aria-controls', config.slotId);
+    button.setAttribute('aria-busy', String(isLoading));
+
+    const spinner = document.createElement('span');
+    spinner.className = 'student-loading-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    spinner.hidden = !isLoading;
+    button.prepend(spinner);
+
+    const feedback = addStudentText(row, 'span', '', 'student-refresh-feedback');
+    feedback.setAttribute('role', 'status');
+    feedback.setAttribute('aria-live', 'polite');
+
+    button.addEventListener('click', () => {
+      const existingButton = document.getElementById(config.controlId);
+      if (!existingButton) {
+        feedback.textContent = '기존 조회 기능을 찾지 못했습니다. 앱을 다시 실행하고 조회 버튼이 표시되는지 확인하세요.';
+        return;
+      }
+      if (existingButton.disabled) {
+        feedback.textContent = '이미 조회 중입니다. 현재 조회가 끝난 뒤 다시 시도하세요.';
+        return;
+      }
+      feedback.textContent = '새 조회를 요청했습니다.';
+      existingButton.click();
+    });
+
+    parent.append(row);
+  };
+
+  installCoreOverview();
+
   return {
     renderIdentity({ me, devices, sessions } = {}) {
       const root = document.createElement('section');
@@ -421,6 +571,14 @@ export function createStudentView() {
       const names = { cpu: 'CPU 사용률', memory: '메모리 사용량', disk: '디스크 남은 공간' };
 
       addText(root, 'h3', '내 PC 실측 기록');
+      root.setAttribute('aria-busy', String(status === 'loading'));
+      addRefreshControl(root, {
+        status,
+        label: '다시 측정',
+        loadingLabel: '측정 중…',
+        controlId: 'local-system-refresh',
+        slotId: 'student-local-system',
+      });
       addText(root, 'p', '운영체제에서 직접 읽은 값입니다. 관리자 권한은 요청하지 않습니다. 예시 값은 사용하지 않으며, 읽지 못한 항목은 확인 불가로 남깁니다.');
 
       if (status === 'idle' || status == null) {
@@ -430,6 +588,8 @@ export function createStudentView() {
       } else if (status === 'error') {
         addText(root, 'p', '이번 요청: 확인 불가 · ' + (typeof error?.message === 'string' ? error.message : '측정 요청을 완료하지 못했습니다.'));
         addText(root, 'p', '요청 시각: ' + timeText(attemptedAt));
+        addText(root, 'p', '예시 값은 표시하지 않았습니다. 이번 측정에 실패한 상태입니다.', 'student-recovery-guide');
+        addText(root, 'p', '다음 조치: 앱의 조회 기능이 실행 중인지 확인하고 「다시 측정」을 누르세요. 반복되면 오류 이유를 기록해 확인합니다.', 'student-next-step');
       } else if (status === 'ok' && data) {
         addText(root, 'p', '이번 측정 완료 · 결과 시각: ' + timeText(data.measuredAt));
         for (const key of ['cpu', 'memory', 'disk']) {
@@ -438,7 +598,7 @@ export function createStudentView() {
           block.className = 'local-system-metric';
           addText(block, 'h4', names[key]);
           if (metricOk(metric)) {
-            addText(block, 'p', metricValue(metric, key));
+            addText(block, 'p', metricValue(metric, key), 'local-system-primary-value');
             addText(block, 'p', '측정 시각: ' + timeText(metric.checkedAt) + ' · 단위: ' + metric.unit);
             addText(block, 'p', '출처: ' + metric.source);
           } else {
@@ -544,6 +704,14 @@ export function createStudentView() {
       };
 
       addText(root, 'h3', '네트워크·방화벽·Windows 기록');
+      root.setAttribute('aria-busy', String(status === 'loading'));
+      addRefreshControl(root, {
+        status,
+        label: '다시 조회',
+        loadingLabel: '조회 중…',
+        controlId: 'network-status-refresh',
+        slotId: 'student-network-status',
+      });
       addText(root, 'p', 'PC 조회는 이 PC의 운영체제에서 읽은 실제 결과입니다. 설명용 예시 값으로 대체하지 않습니다. 조회할 수 없는 항목은 확인 불가로 표시합니다.');
       addText(root, 'p', 'System·Application 경고/오류 건수는 최근 24시간의 Windows 이벤트 로그 집계일 뿐입니다. 이는 침해·공격 탐지 결과나 감염 여부 판단이 아닙니다.');
       addText(root, 'p', '방화벽·네트워크 설정은 읽기만 합니다. 설정 변경, 관리자 권한 상승, 공격·침투 재현은 수행하지 않습니다.');
@@ -555,11 +723,16 @@ export function createStudentView() {
       } else if (status === 'error') {
         addText(root, 'p', '이번 조회: 확인 불가 · ' + (isText(error?.message) ? error.message : '조회 요청을 완료하지 못했습니다.'));
         addText(root, 'p', '요청 시각: ' + timeText(attemptedAt));
+        addText(root, 'p', '예시 값은 표시하지 않았습니다. 이번 네트워크 조회에 실패한 상태입니다.', 'student-recovery-guide');
+        addText(root, 'p', '다음 조치: 앱의 조회 기능이 실행 중인지 확인하고 「다시 조회」를 누르세요. 특정 항목만 실패하면 아래 항목별 이유를 확인합니다.', 'student-next-step');
       } else if (status === 'ok' && data) {
         addText(root, 'p', '실제 PC 조회 완료 · 결과 시각: ' + timeText(data.measuredAt));
 
         const network = section('현재 네트워크 구성');
         addText(network, 'p', statusText(data.network));
+        if (data.network?.status === 'unavailable') {
+          addText(network, 'p', '다음 조치: 앱을 다시 조회하고, 계속 실패하면 표시된 이유와 네트워크 어댑터 상태를 확인하세요. 관리자 권한으로 변경 작업을 수행할 필요는 없습니다.', 'student-next-step');
+        }
         if (data.network?.status === 'ok') {
           if (!data.network.interfaces.length) addText(network, 'p', '조회 성공이지만 IP 구성을 반환한 인터페이스가 없습니다.');
           for (const item of data.network.interfaces) {
@@ -577,6 +750,9 @@ export function createStudentView() {
 
         const firewall = section('Windows 방화벽 프로필');
         addText(firewall, 'p', statusText(data.firewall));
+        if (data.firewall?.status === 'unavailable') {
+          addText(firewall, 'p', '다음 조치: 앱을 다시 조회하세요. 계속 실패하면 Windows 방화벽 조회 구성요소 또는 표시된 오류 이유를 확인하고, 방화벽 설정은 변경하지 마세요.', 'student-next-step');
+        }
         if (data.firewall?.status === 'ok') {
           if (!data.firewall.profiles.length) addText(firewall, 'p', '프로필 정보가 반환되지 않았습니다.');
           for (const profile of data.firewall.profiles) {
@@ -592,6 +768,9 @@ export function createStudentView() {
           const log = data[key];
           const block = section(key === 'systemLog' ? 'Windows System 이벤트 로그' : 'Windows Application 이벤트 로그');
           addText(block, 'p', statusText(log));
+          if (log?.status === 'unavailable') {
+            addText(block, 'p', '다음 조치: 앱을 다시 조회하세요. 계속 실패하면 표시된 이유를 확인하고, 권한 오류가 있더라도 권한 상승 없이 확인 불가로 유지합니다.', 'student-next-step');
+          }
           if (log?.status === 'ok') {
             addText(block, 'p', '경고: ' + log.warningCount + '건 · 오류: ' + log.errorCount + '건');
             addText(block, 'p', '조회 범위: ' + timeText(log.windowStart) + ' ~ ' + timeText(log.windowEnd));
