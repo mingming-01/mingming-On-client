@@ -457,25 +457,25 @@ export function createOnServer(serverOptions={}) {
             &&typeof value.windowStart==='string'&&Number.isFinite(Date.parse(value.windowStart))
             &&typeof value.windowEnd==='string'&&Number.isFinite(Date.parse(value.windowEnd)));
         };
-        const [network,firewall,systemLog,applicationLog]=await Promise.all([
-          networkPromise,firewallPromise,readLog('System'),readLog('Application')
-        ]);
-        let sdp;
-        if(mode!=='connected'){
-          sdp={status:'disconnected',label:'SDP 미연결',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
-            reason:mode==='demo'?'예제 모드는 실제 SDP 서버 연결이 아닙니다.':'이 실행에는 실제 SDP 서버 연결 경로가 설정되어 있지 않습니다.'};
-        }else{
+        const sdpPromise=(async()=>{
+          if(mode!=='connected'){
+            return {status:'disconnected',label:'SDP 미연결',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
+              reason:mode==='demo'?'예제 모드는 실제 SDP 서버 연결이 아닙니다.':'이 실행에는 실제 SDP 서버 연결 경로가 설정되어 있지 않습니다.'};
+          }
           try{
             assertData('identity',await call('readIdentity'));
             assertAlive();
-            sdp={status:'connected',label:'SDP 연결 확인',checkedAt:isoNow(),source:'실제 SDP 원천의 본인 identity 조회',
+            return {status:'connected',label:'SDP 연결 확인',checkedAt:isoNow(),source:'실제 SDP 원천의 본인 identity 조회',
               reason:'이번 조회에서 SDP 원천의 본인 identity 응답을 정상 확인했습니다.'};
           }catch(error){
             if(lifetime.signal.aborted||requestTimedOut)throw error;
-            sdp={status:'unknown',label:'확인 불가',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
+            return {status:'unknown',label:'확인 불가',checkedAt:isoNow(),source:'실제 SDP 원천 조회',
               reason:'SDP 연결 설정이 있어도 이번 원천 조회가 확인되지 않았습니다. 연결 실패인지 확인할 수 없으므로 미연결로 단정하지 않습니다.'};
           }
-        }
+        })();
+        const [network,firewall,systemLog,applicationLog,sdp]=await Promise.all([
+          networkPromise,firewallPromise,readLog('System'),readLog('Application'),sdpPromise
+        ]);
         assertAlive();
         send(200,{ok:true,data:{measuredAt:isoNow(),network,firewall,systemLog,applicationLog,sdp}});
         return;
