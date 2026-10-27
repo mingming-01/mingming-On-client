@@ -51,6 +51,7 @@ const approvedDocs = new Set([
   'docs/CONNECTION_TROUBLESHOOT.md',
   'docs/SDP_HOST_CONNECTION.md',
   'docs/LOCAL_SYSTEM_STATUS.md',
+  'docs/NETWORK_STATUS.md',
 ]);
 
 function isSafePackageFile(file) {
