@@ -53,6 +53,8 @@ mingming-On-client/                 # Git 저장소 최상위
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1
 ```
 
+이 명령은 로컬 서버의 실행·점검 방법입니다. 승인된 운영 호스트 런타임이나 운영 앱 승인 키 검증을 대신하지 않습니다. 7일 차 화면 연습은 아래 시연 안내의 `npm run demo`를 사용하고, 운영 실행은 담당자가 승인된 절차를 제공할 때까지 준비 필요로 기록합니다.
+
 실행 도구의 코드에는 다음 절차가 구현돼 있습니다.
 
 - 앱 폴더와 필수 파일이 있는지 확인합니다.
